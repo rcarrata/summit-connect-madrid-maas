@@ -40,10 +40,10 @@ La plataforma tiene que hacer cumplir todo esto sin que nadie tenga que "portars
 
 | Equipo | gpt-oss-20b (local) | opus5-cloud (cloud) |
 |--------|:-------------------:|:-------------------:|
-| **Desarrolladores** | 1000 tok/min | 100 tok/min |
-| **Ventas** | 500 tok/min | Sin acceso |
+| **Desarrolladores** | 50k tok/min | 10k tok/min |
+| **Ventas** | 20k tok/min | Sin acceso |
 
-El modelo cloud tiene un limite 10x mas bajo que el local. El CIO controla el gasto sin quitar funcionalidad.
+El modelo cloud tiene un limite 5x mas bajo que el local. El CIO controla el gasto sin quitar funcionalidad.
 
 ## Preparacion (antes de la demo)
 
