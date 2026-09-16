@@ -104,7 +104,7 @@ login_and_key "desarrollador-1" || exit 1
 echo "  gpt-oss-20b (local GPU):"
 fire_burst "$KEY" "${H}/${LOCAL_NS}/${LOCAL_RESOURCE}/v1/chat/completions" "${LOCAL_RESOURCE}" "$N"
 
-echo "  opus5-cloud (cloud) - rate limit esperado ~100 tok/min:"
+echo "  opus5-cloud (cloud) - rate limit esperado ~10k tok/min:"
 fire_burst "$KEY" "${H}/${CLOUD_NS}/${CLOUD_RESOURCE}/v1/chat/completions" "${CLOUD_RESOURCE}" "$N"
 
 # --- vendedor-1 ---
@@ -123,5 +123,5 @@ fire_denied "$KEY" "${H}/${CLOUD_NS}/${CLOUD_RESOURCE}/v1/chat/completions" "${C
 # --- summary ---
 printf '\n=== Resumen ===\n'
 echo "Comportamiento esperado:"
-echo "  desarrollador-1: ve 2 modelos, gpt-oss-20b OK, opus5-cloud rate-limited (~100 tok/min)"
-echo "  vendedor-1:      ve 1 modelo, gpt-oss-20b OK (500 tok/min), opus5-cloud 403"
+echo "  desarrollador-1: ve 2 modelos, gpt-oss-20b OK, opus5-cloud rate-limited (~10k tok/min)"
+echo "  vendedor-1:      ve 1 modelo, gpt-oss-20b OK (20k tok/min), opus5-cloud 403"

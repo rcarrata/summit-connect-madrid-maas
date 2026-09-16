@@ -5,8 +5,8 @@
 # suscripciones por defecto (free=10, premium=20).
 #
 # Matriz de limites:
-#   Desarrolladores: gpt-oss-20b 1000 tok/min, opus5-cloud 100 tok/min
-#   Ventas:          gpt-oss-20b 500 tok/min (sin acceso a cloud)
+#   Desarrolladores: gpt-oss-20b 50000 tok/min, opus5-cloud 10000 tok/min
+#   Ventas:          gpt-oss-20b 20000 tok/min (sin acceso a cloud)
 ---
 apiVersion: maas.opendatahub.io/v1alpha1
 kind: MaaSSubscription
@@ -15,7 +15,7 @@ metadata:
   namespace: models-as-a-service
   annotations:
     openshift.io/display-name: "SCM - Equipo Desarrolladores"
-    openshift.io/description: "Acceso a modelo local (1000 tok/min) y cloud (100 tok/min)"
+    openshift.io/description: "Acceso a modelo local (50000 tok/min) y cloud (10000 tok/min)"
 spec:
   owner:
     groups:
@@ -25,12 +25,12 @@ spec:
     - name: gpt-oss-20b
       namespace: llm
       tokenRateLimits:
-        - limit: 1000
+        - limit: 50000
           window: 1m
     - name: opus5-cloud
       namespace: external-models
       tokenRateLimits:
-        - limit: 100
+        - limit: 10000
           window: 1m
   priority: 30
 ---
@@ -41,7 +41,7 @@ metadata:
   namespace: models-as-a-service
   annotations:
     openshift.io/display-name: "SCM - Equipo Ventas"
-    openshift.io/description: "Acceso solo al modelo local (500 tok/min)"
+    openshift.io/description: "Acceso solo al modelo local (20000 tok/min)"
 spec:
   owner:
     groups:
@@ -51,6 +51,6 @@ spec:
     - name: gpt-oss-20b
       namespace: llm
       tokenRateLimits:
-        - limit: 500
+        - limit: 20000
           window: 1m
   priority: 30
