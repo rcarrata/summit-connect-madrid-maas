@@ -1,0 +1,24 @@
+# Summit Connect Madrid: control de acceso por grupo
+#
+# Matriz de acceso:
+#   gpt-oss-20b    Desarrolladores + Ventas  (la politica system:authenticated de setup-maas.sh ya lo cubre)
+#   opus5-cloud    Solo Desarrolladores
+#
+# Solo opus5-cloud necesita una politica explicita.
+---
+apiVersion: maas.opendatahub.io/v1alpha1
+kind: MaaSAuthPolicy
+metadata:
+  name: scm-acceso-cloud
+  namespace: models-as-a-service
+  annotations:
+    openshift.io/display-name: "SCM - Acceso Cloud (Opus 5)"
+    openshift.io/description: "Solo el equipo de Desarrolladores puede acceder al modelo cloud"
+spec:
+  modelRefs:
+    - name: opus5-cloud
+      namespace: external-models
+  subjects:
+    groups:
+      - name: scm-desarrolladores
+    users: []

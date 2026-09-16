@@ -1,0 +1,24 @@
+# Not used directly - the passthrough TLS route is created imperatively
+# by install-openshell.sh because it needs the dynamic hostname.
+#
+# Kept here for reference. The actual command is:
+#   oc create route passthrough openshell-gw \
+#     --service=openshell --port=8080 \
+#     --hostname="openshell-gw-sandbox-scm.${APPS_DOMAIN}" \
+#     -n sandbox-scm
+#
+# Passthrough TLS is required for gRPC - edge/re-encrypt routes strip
+# gRPC trailers (grpc-status), breaking all CLI communication.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: openshell-gw
+  namespace: sandbox-scm
+spec:
+  tls:
+    termination: passthrough
+  to:
+    kind: Service
+    name: openshell
+  port:
+    targetPort: grpc

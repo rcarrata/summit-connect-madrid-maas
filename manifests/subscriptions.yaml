@@ -1,0 +1,56 @@
+# Summit Connect Madrid: suscripciones por equipo
+#
+# Cada equipo tiene una suscripcion que cubre todos sus modelos con limites
+# de tokens por modelo. Prioridad 30 para tener preferencia sobre las
+# suscripciones por defecto (free=10, premium=20).
+#
+# Matriz de limites:
+#   Desarrolladores: gpt-oss-20b 1000 tok/min, opus5-cloud 100 tok/min
+#   Ventas:          gpt-oss-20b 500 tok/min (sin acceso a cloud)
+---
+apiVersion: maas.opendatahub.io/v1alpha1
+kind: MaaSSubscription
+metadata:
+  name: scm-desarrolladores
+  namespace: models-as-a-service
+  annotations:
+    openshift.io/display-name: "SCM - Equipo Desarrolladores"
+    openshift.io/description: "Acceso a modelo local (1000 tok/min) y cloud (100 tok/min)"
+spec:
+  owner:
+    groups:
+      - name: scm-desarrolladores
+    users: []
+  modelRefs:
+    - name: gpt-oss-20b
+      namespace: llm
+      tokenRateLimits:
+        - limit: 1000
+          window: 1m
+    - name: opus5-cloud
+      namespace: external-models
+      tokenRateLimits:
+        - limit: 100
+          window: 1m
+  priority: 30
+---
+apiVersion: maas.opendatahub.io/v1alpha1
+kind: MaaSSubscription
+metadata:
+  name: scm-ventas
+  namespace: models-as-a-service
+  annotations:
+    openshift.io/display-name: "SCM - Equipo Ventas"
+    openshift.io/description: "Acceso solo al modelo local (500 tok/min)"
+spec:
+  owner:
+    groups:
+      - name: scm-ventas
+    users: []
+  modelRefs:
+    - name: gpt-oss-20b
+      namespace: llm
+      tokenRateLimits:
+        - limit: 500
+          window: 1m
+  priority: 30
