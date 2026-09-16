@@ -1,0 +1,46 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "local/gpt-oss-20b",
+  "small_model": "local/gpt-oss-20b",
+  "enabled_providers": ["local", "cloud"],
+  "provider": {
+    "local": {
+      "api": "openai",
+      "name": "GPU Local (gpt-oss-20b)",
+      "env": ["OPENAI_API_KEY"],
+      "options": {
+        "baseURL": "https://maas.__DOMAIN__/llm/gpt-oss-20b/v1"
+      },
+      "models": {
+        "gpt-oss-20b": {
+          "name": "GPT-OSS 20B (On-Prem)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": false,
+          "temperature": true,
+          "limit": { "context": 32768, "output": 8192 },
+          "cost": { "input": 0, "output": 0 }
+        }
+      }
+    },
+    "cloud": {
+      "api": "openai",
+      "name": "Cloud (Opus 5)",
+      "env": ["OPENAI_API_KEY"],
+      "options": {
+        "baseURL": "https://maas.__DOMAIN__/external-models/opus5-cloud/v1"
+      },
+      "models": {
+        "opus5-cloud": {
+          "name": "Claude Opus 5 (Cloud)",
+          "tool_call": true,
+          "reasoning": true,
+          "attachment": false,
+          "temperature": true,
+          "limit": { "context": 200000, "output": 16384 },
+          "cost": { "input": 0, "output": 0 }
+        }
+      }
+    }
+  }
+}

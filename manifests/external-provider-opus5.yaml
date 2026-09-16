@@ -1,0 +1,12 @@
+apiVersion: inference.opendatahub.io/v1alpha1
+kind: ExternalProvider
+metadata:
+  name: anthropic-mantle
+  namespace: external-models
+spec:
+  provider: anthropic
+  endpoint: bedrock-mantle.us-east-1.api.aws
+  auth:
+    type: apikey
+    secretRef:
+      name: anthropic-mantle-api-key

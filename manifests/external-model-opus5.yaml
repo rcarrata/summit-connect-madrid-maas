@@ -1,0 +1,13 @@
+apiVersion: inference.opendatahub.io/v1alpha1
+kind: ExternalModel
+metadata:
+  name: opus5-cloud
+  namespace: external-models
+spec:
+  modelName: opus5-cloud
+  externalProviderRefs:
+    - ref:
+        name: anthropic-mantle
+      targetModel: anthropic.claude-opus-5
+      apiFormat: openai-chat
+      path: /anthropic/v1/messages

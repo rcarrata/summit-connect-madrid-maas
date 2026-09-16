@@ -1,0 +1,139 @@
+# Summit Connect Madrid - politica de red para sandbox
+#
+# Allowlist: solo las conexiones listadas estan permitidas.
+# Todo lo demas esta bloqueado por defecto (incluido marca.com).
+#
+# Tema Atletico: as.com permitido, marca.com bloqueado.
+# "Estamos en el estadio del Atletico."
+#
+# Template: reemplazar __OCP_APPS_DOMAIN__ antes de aplicar.
+# Apply:  openshell policy set [--wait] <sandbox-name> --policy <rendered-file>
+
+version: 1
+
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /usr
+    - /lib
+    - /lib64
+    - /bin
+    - /sbin
+    - /proc
+    - /dev/urandom
+    - /etc
+    - /opt
+    - /var/log
+  read_write:
+    - /sandbox
+    - /workspace
+    - /tmp
+    - /home/sandbox
+    - /dev/null
+    - /dev/zero
+
+landlock:
+  compatibility: best_effort
+
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+
+network_policies:
+
+  maas_gateway:
+    name: "MaaS Gateway (modelos IA)"
+    endpoints:
+      - host: "maas.__OCP_APPS_DOMAIN__"
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: full
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /usr/bin/python3 }
+      - { path: "/sandbox/.uv/python/**" }
+      - { path: /usr/bin/node }
+      - { path: /usr/local/bin/opencode }
+
+  diario_as:
+    name: "Diario AS (noticias deportivas)"
+    endpoints:
+      - host: "as.com"
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: full
+      - host: "*.as.com"
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: full
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /usr/bin/python3 }
+      - { path: /usr/bin/node }
+
+  npm_registry:
+    name: "npm"
+    endpoints:
+      - host: registry.npmjs.org
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: full
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /usr/bin/node }
+      - { path: /usr/local/bin/opencode }
+
+  pypi:
+    name: "PyPI"
+    endpoints:
+      - host: pypi.org
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: full
+      - host: files.pythonhosted.org
+        port: 443
+        enforcement: enforce
+        access: full
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /usr/bin/python3 }
+      - { path: "/sandbox/.uv/python/**" }
+      - { path: /usr/local/bin/uv }
+
+  github_readonly:
+    name: "GitHub (solo lectura)"
+    endpoints:
+      - host: github.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-only
+      - host: api.github.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-only
+      - host: "*.githubusercontent.com"
+        port: 443
+        enforcement: enforce
+        access: read-only
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /usr/bin/git }
+      - { path: /usr/bin/node }
+
+  openshift_oauth:
+    name: "OpenShift OAuth"
+    endpoints:
+      - host: "oauth-openshift.__OCP_APPS_DOMAIN__"
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: full
+    binaries:
+      - { path: /usr/bin/curl }
