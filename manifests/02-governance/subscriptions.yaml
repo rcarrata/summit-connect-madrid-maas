@@ -5,8 +5,13 @@
 # suscripciones por defecto (free=10, premium=20).
 #
 # Matriz de limites:
-#   Desarrolladores: gpt-oss-20b 50000 tok/min, opus5-cloud 10000 tok/min
+#   Desarrolladores: gpt-oss-20b 50000 tok/min, opus5-cloud 2000 tok/min
 #   Ventas:          gpt-oss-20b 20000 tok/min (sin acceso a cloud)
+#
+# El limite del cloud es bajo a proposito: con 2000 tok/min, dos o tres
+# peticiones reales de OpenCode ya devuelven 429 en el escenario, que es
+# justo lo que hay que ensenar. El local se queda holgado para que la parte
+# de codigo no se corte a mitad de demo.
 ---
 apiVersion: maas.opendatahub.io/v1alpha1
 kind: MaaSSubscription
@@ -15,7 +20,7 @@ metadata:
   namespace: models-as-a-service
   annotations:
     openshift.io/display-name: "SCM - Equipo Desarrolladores"
-    openshift.io/description: "Acceso a modelo local (50000 tok/min) y cloud (10000 tok/min)"
+    openshift.io/description: "Acceso a modelo local (50000 tok/min) y cloud (2000 tok/min)"
 spec:
   owner:
     groups:
@@ -32,7 +37,8 @@ spec:
     - name: opus5-cloud
       namespace: external-models
       tokenRateLimits:
-        - limit: 10000
+        # bajo a proposito: el 429 tiene que salir en directo
+        - limit: 2000
           window: 1m
   priority: 30
 ---

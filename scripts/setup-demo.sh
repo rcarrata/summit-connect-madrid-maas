@@ -101,7 +101,7 @@ echo "  ${GROUP_SALES}: ${USERS_SALES[*]}"
 # --- external-models namespace ---
 
 echo "==> Creating external-models namespace"
-oc apply -f "${MANIFESTS}/namespace-external-models.yaml"
+oc apply -f "${MANIFESTS}/01-models/opus5-cloud/00-namespace.yaml"
 
 # --- ABSK secret ---
 
@@ -115,21 +115,21 @@ oc label secret anthropic-mantle-api-key -n external-models \
 # --- external model ---
 
 echo "==> Deploying ExternalProvider + ExternalModel (Opus 5 Cloud)"
-oc apply -f "${MANIFESTS}/external-provider-opus5.yaml"
-oc apply -f "${MANIFESTS}/external-model-opus5.yaml"
+oc apply -f "${MANIFESTS}/01-models/opus5-cloud/02-external-provider.yaml"
+oc apply -f "${MANIFESTS}/01-models/opus5-cloud/03-external-model.yaml"
 
 # --- MaaSModelRef ---
 
 echo "==> Applying MaaSModelRef for opus5-cloud"
-oc apply -f "${MANIFESTS}/maas-model-opus5.yaml"
+oc apply -f "${MANIFESTS}/01-models/opus5-cloud/04-maas-model-ref.yaml"
 
 echo "==> Applying compat HTTPRoute for Bedrock Mantle path rewrite"
-oc apply -f "${MANIFESTS}/httproute-opus5-compat.yaml"
+oc apply -f "${MANIFESTS}/01-models/opus5-cloud/05-httproute-compat.yaml"
 
 # --- auth policies and subscriptions ---
 
 echo "==> Applying auth policies"
-oc apply -f "${MANIFESTS}/auth-policies.yaml"
+oc apply -f "${MANIFESTS}/02-governance/auth-policies.yaml"
 
 echo "==> Removing default subscriptions (conflict with SCM subscriptions)"
 for sub in $(oc get maassubscription -n models-as-a-service --no-headers 2>/dev/null \
@@ -138,13 +138,13 @@ for sub in $(oc get maassubscription -n models-as-a-service --no-headers 2>/dev/
 done
 
 echo "==> Applying subscriptions"
-oc apply -f "${MANIFESTS}/subscriptions.yaml"
+oc apply -f "${MANIFESTS}/02-governance/subscriptions.yaml"
 
 # --- proyectos por equipo ---
 # Cada equipo necesita un proyecto propio (y ser admin de el) para crear su
 # playground de Gen AI studio y sus AI asset endpoints.
 echo "==> Creating per-team Data Science projects"
-oc apply -f "${MANIFESTS}/team-projects.yaml"
+oc apply -f "${MANIFESTS}/03-projects/team-projects.yaml"
 
 # --- wait for MaaSModelRef Ready ---
 

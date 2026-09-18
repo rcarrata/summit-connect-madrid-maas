@@ -46,7 +46,7 @@ info "MaaS gateway: ${MAAS_GATEWAY}"
 
 info "Rendering network policy"
 RENDERED_POLICY=$(mktemp); _TMPFILES+=("$RENDERED_POLICY")
-render_policy "${MANIFESTS}/policy-scm.yaml.template" "$RENDERED_POLICY" "$DOMAIN"
+render_policy "${MANIFESTS}/04-sandbox/policy-scm.yaml.template" "$RENDERED_POLICY" "$DOMAIN"
 
 # --- create sandbox ---
 
@@ -67,7 +67,7 @@ openshell sandbox exec --name "$SANDBOX_NAME" --no-tty -- \
 
 info "Uploading OpenCode config (2 models: local + cloud)"
 RENDERED_CONFIG=$(mktemp); _TMPFILES+=("$RENDERED_CONFIG")
-sed "s/__DOMAIN__/${DOMAIN}/g" "${MANIFESTS}/opencode-config.json" > "$RENDERED_CONFIG"
+sed "s/__DOMAIN__/${DOMAIN}/g" "${MANIFESTS}/04-sandbox/opencode-config.json" > "$RENDERED_CONFIG"
 openshell sandbox exec --name "$SANDBOX_NAME" --no-tty -- \
   mkdir -p /sandbox/.config/opencode
 openshell sandbox upload "$SANDBOX_NAME" "$RENDERED_CONFIG" /sandbox/.config/opencode/opencode.jsonc

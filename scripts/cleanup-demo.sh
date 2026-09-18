@@ -21,26 +21,26 @@ IDP=scm-demo
 oc whoami >/dev/null 2>&1 || { echo "not logged in to a cluster"; exit 1; }
 
 echo "==> Removing subscriptions"
-oc delete -f "${MANIFESTS}/subscriptions.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
+oc delete -f "${MANIFESTS}/02-governance/subscriptions.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
 
 echo "==> Removing auth policies"
-oc delete -f "${MANIFESTS}/auth-policies.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
+oc delete -f "${MANIFESTS}/02-governance/auth-policies.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
 
 echo "==> Removing MaaSModelRef"
-oc delete -f "${MANIFESTS}/maas-model-opus5.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
+oc delete -f "${MANIFESTS}/01-models/opus5-cloud/04-maas-model-ref.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
 
 echo "==> Removing compat HTTPRoute"
-oc delete -f "${MANIFESTS}/httproute-opus5-compat.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
+oc delete -f "${MANIFESTS}/01-models/opus5-cloud/05-httproute-compat.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
 
 echo "==> Removing ExternalModel + ExternalProvider"
-oc delete -f "${MANIFESTS}/external-model-opus5.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
-oc delete -f "${MANIFESTS}/external-provider-opus5.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
+oc delete -f "${MANIFESTS}/01-models/opus5-cloud/03-external-model.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
+oc delete -f "${MANIFESTS}/01-models/opus5-cloud/02-external-provider.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
 
 echo "==> Removing ABSK secret"
 oc delete secret anthropic-mantle-api-key -n external-models --ignore-not-found 2>&1 | sed 's/^/  /'
 
 echo "==> Removing external-models namespace"
-oc delete -f "${MANIFESTS}/namespace-external-models.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
+oc delete -f "${MANIFESTS}/01-models/opus5-cloud/00-namespace.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
 
 echo "==> Removing groups"
 for grp in $GROUP_DEV $GROUP_SALES; do

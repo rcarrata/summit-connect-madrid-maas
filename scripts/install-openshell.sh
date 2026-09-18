@@ -50,7 +50,7 @@ HELM_ARGS=(
   upgrade --install openshell
   oci://ghcr.io/nvidia/openshell/helm-chart
   -n "$NAMESPACE"
-  -f "${MANIFESTS}/openshell-values.yaml"
+  -f "${MANIFESTS}/04-sandbox/openshell-values.yaml"
 )
 [ -n "${OPENSHELL_VERSION:-}" ] && HELM_ARGS+=(--version "$OPENSHELL_VERSION")
 helm "${HELM_ARGS[@]}"

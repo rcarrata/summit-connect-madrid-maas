@@ -43,11 +43,13 @@ La plataforma lo garantiza: nadie tiene que "portarse bien" manualmente.
 
 | Equipo | gpt-oss-20b (local) | opus5-cloud (cloud) |
 |--------|:-------------------:|:-------------------:|
-| **Desarrolladores** | 50k tok/min | 10k tok/min |
+| **Desarrolladores** | 50k tok/min | 2k tok/min |
 | **Ventas** | 20k tok/min | Sin acceso (403) |
-| **admin** (presentador) | 50k tok/min | 10k tok/min |
+| **admin** (presentador) | 50k tok/min | 2k tok/min |
 
-El modelo cloud tiene un limite 5x mas bajo que el local. El CIO controla el gasto sin quitar funcionalidad.
+El limite del cloud es 25x mas bajo que el del local, y esta puesto bajo a proposito: con 2.000 tokens/min
+dos o tres peticiones reales de OpenCode ya devuelven **429**, que es lo que hay que ver en directo. El CIO
+controla el gasto sin quitar funcionalidad.
 
 > `admin` esta incluido a proposito: en MaaS la visibilidad de modelos va por **suscripcion + politica de
 > autorizacion**, no por ser cluster-admin. Si el presentador no esta en ninguna suscripcion, la UI de MaaS
@@ -71,12 +73,12 @@ cd rhoai-maas-guide && ./scripts/setup-maas.sh --with-observability
 
 ### 2. Modelo local gpt-oss-20b
 
-Los manifests viven en este repo (`manifests/gpt-oss-20b/`, copiados de
+Los manifests viven en este repo (`manifests/01-models/gpt-oss-20b/`, copiados de
 [rhoai-maas-guide](https://github.com/rh-aiservices-bu/rhoai-maas-guide/tree/main/manifests/05-maas-models/gpt-oss-20b)):
 
 ```bash
-oc apply -k manifests/gpt-oss-20b/llm     # LLMInferenceService (vLLM CUDA, 1 GPU)
-oc apply -k manifests/gpt-oss-20b/maas    # MaaSModelRef + auth policy + subscripciones base
+oc apply -k manifests/01-models/gpt-oss-20b/llm    # LLMInferenceService (vLLM CUDA, 1 GPU)
+oc apply -k manifests/01-models/gpt-oss-20b/maas   # MaaSModelRef + auth policy + suscripciones base
 oc get llminferenceservice -n llm -w      # espera READY=True (~10 min, descarga modelcar 8GB)
 ```
 
@@ -198,7 +200,17 @@ El panel muestra tokens y T/s, que es justo lo que la suscripcion esta limitando
 
 ![Playground con el modelo local](docs/images/14-playground-dev-local-model.png)
 
-**Rate limiting**: opcional, con `./scripts/run-demo.sh` en una terminal aparte si quieres ver los `429`.
+**Rate limiting en vivo**: en el mismo playground cambia el modelo a `opus5-cloud` y lanza dos o tres
+preguntas seguidas. Con 2.000 tokens/min la suscripcion se agota enseguida y la UI devuelve el error del
+gateway (`429 Too Many Requests`). Comportamiento verificado en este cluster bajando el limite a 300
+tokens/min: la primera peticion devuelve `200` y de la segunda en adelante `429`.
+
+> El 429 del modelo cloud solo se ve si la ABSK es valida: el contador de tokens se alimenta de las
+> respuestas del proveedor, asi que con la ABSK caducada nunca se llega al limite (solo se ven 401/503).
+
+> "Nadie ha tenido que portarse bien. El equipo puede pedir lo que quiera; el gasto lo corta la plataforma."
+
+Si prefieres verlo en numeros, `./scripts/run-demo.sh` hace rafagas por equipo y resume `200 / 429 / 403`.
 
 ### Acto 4 - El sandbox del desarrollador (6 min)
 
@@ -233,13 +245,20 @@ opencode run --model cloud/opus5-cloud \
 
 ```bash
 opencode run --model local/gpt-oss-20b \
-  "Usa tu herramienta de fetch para leer https://as.com y dime el titular principal"
-# -> el agente lee AS y responde el titular
+  "Usa tu herramienta de fetch para leer https://as.com y dime si has podido acceder"
+
+#   % WebFetch https://as.com
+#   Access successful, content retrieved.
 
 opencode run --model local/gpt-oss-20b \
   "Ahora haz lo mismo con https://marca.com"
-# -> el agente reporta que la conexion esta bloqueada: policy_denied
+
+#   ✗ WebFetch https://marca.com failed
+#   Error: StatusCode: non 2xx status code (403 GET https://marca.com)
+#   403 Forbidden - access was blocked.
 ```
+
+(Salida real de este cluster: el agente accede a AS y recibe un 403 del **sandbox** al intentar Marca.)
 
 > "Estamos en el estadio del Atletico. Aqui no se lee Marca."
 >
@@ -257,7 +276,7 @@ opencode run --model local/gpt-oss-20b \
 
 ## Playground por equipo
 
-Cada equipo tiene su **proyecto** y es admin de el (`manifests/team-projects.yaml`):
+Cada equipo tiene su **proyecto** y es admin de el (`manifests/03-projects/team-projects.yaml`):
 
 | Equipo | Proyecto | Admin |
 |---|---|---|
@@ -278,37 +297,50 @@ Camino en la UI:
 
 El playground pasa por el gateway de MaaS con la suscripcion del equipo, asi que la matriz de acceso se ve
 sin tocar nada mas: en el proyecto de Ventas el modelo cloud no esta disponible; en el de Desarrolladores si.
-Como plantilla declarativa de `OGXServer` hay `manifests/playground/playground.yaml.template`.
+Como plantilla declarativa de `OGXServer` hay `manifests/03-projects/playground-ogxserver.yaml.template`.
 
 ## Archivos del repositorio
 
 ```
 manifests/
-  gpt-oss-20b/                      Modelo local (llm/ + maas/), de rhoai-maas-guide
-  namespace-external-models.yaml    Namespace con labels de gateway
-  external-provider-opus5.yaml      ExternalProvider (Anthropic + Mantle)
-  external-model-opus5.yaml         ExternalModel: opus5-cloud
-  httproute-opus5-compat.yaml       Compat HTTPRoute (ext-proc path rewrite fix)
-  secret-opus5.yaml                 Secret template (REPLACE_ME) para la ABSK
-  maas-model-opus5.yaml             MaaSModelRef para opus5-cloud
-  auth-policies.yaml                Acceso al cloud: grupo desarrolladores + admin
-  subscriptions.yaml                Limites por equipo (priority 30)
-  opencode-config.json              OpenCode: providers local/ y cloud/
-  policy-scm.yaml.template          Politica del sandbox (as.com si, marca.com no)
-  team-projects.yaml                Proyecto por equipo (cada usuario es admin del suyo)
-  playground/                       Plantilla OGXServer para el playground por equipo
-  openshell-values.yaml             Helm values para OpenShell
-  openshell-route.yaml              Route passthrough TLS (referencia)
+  01-models/                          Los dos modelos, uno por directorio
+    gpt-oss-20b/                        Local, en GPU (kustomize, de rhoai-maas-guide)
+      llm/                                LLMInferenceService (vLLM CUDA)
+      maas/                               MaaSModelRef, auth policy y suscripciones base
+    opus5-cloud/                        Cloud, via Bedrock-Mantle (aplicar en orden)
+      00-namespace.yaml                   Namespace con labels de gateway
+      01-secret-absk.yaml                 Secret de la ABSK (REPLACE_ME)
+      02-external-provider.yaml           ExternalProvider (anthropic-mantle)
+      03-external-model.yaml              ExternalModel: opus5-cloud
+      04-maas-model-ref.yaml              MaaSModelRef que lo publica en el gateway
+      05-httproute-compat.yaml            Compat HTTPRoute (fix del rewrite de ext-proc)
+  02-governance/                      Quien accede a que, y con que limites
+    auth-policies.yaml                  Cloud: grupo desarrolladores + admin
+    subscriptions.yaml                  Limites por equipo (priority 30)
+  03-projects/                        Espacio de trabajo de cada equipo
+    team-projects.yaml                  desarrolladores-1-proyecto y ventas-1-proyecto
+    playground-ogxserver.yaml.template   Plantilla de OGXServer para el playground
+  04-sandbox/                         El agente y su jaula
+    openshell-values.yaml               Helm values del gateway de OpenShell
+    openshell-route.yaml                Route passthrough TLS (referencia)
+    opencode-config.json                OpenCode: providers local/ y cloud/
+    policy-scm.yaml.template            Politica del sandbox (as.com si, marca.com no)
 
 scripts/
-  setup-demo.sh                     Usuarios, grupos, modelo cloud, gobernanza
-  check-demo.sh                     Comprobacion previa (los 4 fallos tipicos)
-  run-demo.sh                       Verificacion de la matriz de acceso y rate limits
+  setup-demo.sh                     Usuarios, grupos, modelo cloud, gobernanza, proyectos
+  check-demo.sh                     Comprobacion previa (los fallos tipicos)
+  run-demo.sh                       Matriz de acceso y rate limits (429)
   install-openshell.sh              Gateway de OpenShell
   setup-sandbox.sh                  Sandbox + OpenCode + politica de red
   cleanup-demo.sh                   Borrar todo
   common.sh                         Funciones compartidas
+
+docs/images/                        Capturas de cada pantalla del guion
 ```
+
+Los directorios de `manifests/` van numerados en el orden en que se aplican, y ese orden es el mismo
+que el de los actos de la demo: primero los modelos, luego la gobernanza, luego los proyectos de cada
+equipo y por ultimo el sandbox del agente.
 
 ---
 
@@ -318,11 +350,11 @@ Los cuatro fallos reales que hemos visto en este cluster, con su sintoma exacto:
 
 | Sintoma | Causa | Arreglo |
 |---|---|---|
-| La UI de MaaS muestra **0 modelos** al presentador; `/maas-api/v1/models` devuelve `{"data":[]}` | La visibilidad va por suscripcion + politica de autorizacion. Ser `cluster-admin` no da acceso | Añade el usuario a `spec.owner.users` de la suscripcion y a `spec.subjects.users` de la `MaaSAuthPolicy` (ojo: son listas de **strings**, no de objetos). Ya incluido en `subscriptions.yaml` y `auth-policies.yaml` |
+| La UI de MaaS muestra **0 modelos** al presentador; `/maas-api/v1/models` devuelve `{"data":[]}` | La visibilidad va por suscripcion + politica de autorizacion. Ser `cluster-admin` no da acceso | Añade el usuario a `spec.owner.users` de la suscripcion y a `spec.subjects.users` de la `MaaSAuthPolicy` (ojo: son listas de **strings**, no de objetos). Ya incluido en `02-governance/subscriptions.yaml` y `02-governance/auth-policies.yaml` |
 | En **External models** no aparece `opus5-cloud` | El selector **Project** esta en `ai-tenants` | Cambia el proyecto a `external-models` |
 | El modelo cloud devuelve `401 authentication_error` con `"type":"error"` de Anthropic | La **ABSK** del `ExternalProvider` ha caducado. MaaS enruta bien; el 401 lo da el proveedor | Regenera la ABSK y actualiza el secret `anthropic-mantle-api-key` (paso 3) |
 | Dentro del sandbox, OpenCode no ve ningun modelo; `curl` al gateway devuelve `403` y la lista de modelos sale vacia | La **API key de MaaS caducada** (las creadas con `expiresIn: 24h` mueren al dia siguiente) | Crea una nueva en la UI con 30 dias y re-ejecuta `setup-sandbox.sh` (o actualiza `/sandbox/.sandbox-init.sh`) |
-| OpenCode falla con `Error: Forbidden: policy_denied` pero `curl` al mismo endpoint funciona | La politica del sandbox autoriza binarios por ruta y OpenCode se instala en `/sandbox/.npm-global/...`, no en `/usr/local/bin/opencode` | Ya corregido en `policy-scm.yaml.template` (`/sandbox/.npm-global/**` y `/sandbox/.cache/opencode/**`). Recarga en caliente: `openshell policy set --policy <file> --wait <sandbox>` |
+| OpenCode falla con `Error: Forbidden: policy_denied` pero `curl` al mismo endpoint funciona | La politica del sandbox autoriza binarios por ruta y OpenCode se instala en `/sandbox/.npm-global/...`, no en `/usr/local/bin/opencode` | Ya corregido en `04-sandbox/policy-scm.yaml.template` (`/sandbox/.npm-global/**` y `/sandbox/.cache/opencode/**`). Recarga en caliente: `openshell policy set --policy <file> --wait <sandbox>` |
 
 ## Limpiar
 
