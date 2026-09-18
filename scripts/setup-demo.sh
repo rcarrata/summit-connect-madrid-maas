@@ -133,12 +133,18 @@ oc apply -f "${MANIFESTS}/auth-policies.yaml"
 
 echo "==> Removing default subscriptions (conflict with SCM subscriptions)"
 for sub in $(oc get maassubscription -n models-as-a-service --no-headers 2>/dev/null \
-  | awk '{print $1}' | grep -v '^scm-'); do
+  | awk '{print $1}' | grep -v '^scm-' || true); do
   oc delete maassubscription "$sub" -n models-as-a-service --ignore-not-found 2>&1 | sed 's/^/  /'
 done
 
 echo "==> Applying subscriptions"
 oc apply -f "${MANIFESTS}/subscriptions.yaml"
+
+# --- proyectos por equipo ---
+# Cada equipo necesita un proyecto propio (y ser admin de el) para crear su
+# playground de Gen AI studio y sus AI asset endpoints.
+echo "==> Creating per-team Data Science projects"
+oc apply -f "${MANIFESTS}/team-projects.yaml"
 
 # --- wait for MaaSModelRef Ready ---
 

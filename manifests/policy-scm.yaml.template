@@ -55,6 +55,8 @@ network_policies:
       - { path: "/sandbox/.uv/python/**" }
       - { path: /usr/bin/node }
       - { path: /usr/local/bin/opencode }
+      - { path: "/sandbox/.npm-global/**" }
+      - { path: "/sandbox/.cache/opencode/**" }
 
   diario_as:
     name: "Diario AS (noticias deportivas)"
@@ -73,6 +75,8 @@ network_policies:
       - { path: /usr/bin/curl }
       - { path: /usr/bin/python3 }
       - { path: /usr/bin/node }
+      - { path: "/sandbox/.npm-global/**" }
+      - { path: "/sandbox/.cache/opencode/**" }
 
   npm_registry:
     name: "npm"
@@ -86,6 +90,8 @@ network_policies:
       - { path: /usr/bin/curl }
       - { path: /usr/bin/node }
       - { path: /usr/local/bin/opencode }
+      - { path: "/sandbox/.npm-global/**" }
+      - { path: "/sandbox/.cache/opencode/**" }
 
   pypi:
     name: "PyPI"
@@ -97,6 +103,7 @@ network_policies:
         access: full
       - host: files.pythonhosted.org
         port: 443
+        protocol: rest
         enforcement: enforce
         access: full
     binaries:

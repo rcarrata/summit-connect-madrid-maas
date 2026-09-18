@@ -1,0 +1,63 @@
+# Summit Connect Madrid - un proyecto de Data Science por equipo.
+#
+# Cada usuario es admin de su propio proyecto, para poder crear el playground
+# de Gen AI studio, endpoints de AI assets y desplegar lo que necesite.
+#
+#   desarrolladores-1-proyecto -> desarrollador-1 (grupo scm-desarrolladores)
+#   ventas-1-proyecto          -> vendedor-1      (grupo scm-ventas)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: desarrolladores-1-proyecto
+  labels:
+    opendatahub.io/dashboard: "true"
+    modelmesh-enabled: "false"
+  annotations:
+    openshift.io/display-name: "Proyecto Desarrolladores"
+    openshift.io/description: "Proyecto del equipo de Desarrolladores (playground + assets)"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: desarrolladores-1-proyecto-admin
+  namespace: desarrolladores-1-proyecto
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: desarrollador-1
+  - kind: Group
+    apiGroup: rbac.authorization.k8s.io
+    name: scm-desarrolladores
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  name: admin
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ventas-1-proyecto
+  labels:
+    opendatahub.io/dashboard: "true"
+    modelmesh-enabled: "false"
+  annotations:
+    openshift.io/display-name: "Proyecto Ventas"
+    openshift.io/description: "Proyecto del equipo de Ventas (playground + assets)"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ventas-1-proyecto-admin
+  namespace: ventas-1-proyecto
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: vendedor-1
+  - kind: Group
+    apiGroup: rbac.authorization.k8s.io
+    name: scm-ventas
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  name: admin

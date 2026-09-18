@@ -20,7 +20,9 @@ spec:
   owner:
     groups:
       - name: scm-desarrolladores
-    users: []
+    users:
+      # sin esto, admin ve 0 modelos en la UI de MaaS (la visibilidad es por suscripcion)
+      - admin
   modelRefs:
     - name: gpt-oss-20b
       namespace: llm

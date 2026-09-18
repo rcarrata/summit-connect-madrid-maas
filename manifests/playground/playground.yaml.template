@@ -1,0 +1,132 @@
+# Summit Connect Madrid - GenAI Playground per equipo
+#
+# Un playground (OGXServer / LlamaStack) por namespace de equipo. Cada uno usa
+# la API key de MaaS del equipo, asi que el playground SOLO puede ver los modelos
+# que la suscripcion del equipo permite:
+#
+#   playground-desarrolladores -> gpt-oss-20b + opus5-cloud
+#   playground-ventas          -> gpt-oss-20b  (opus5-cloud da 403)
+#
+# Placeholders: __NAMESPACE__ __TEAM__ __GROUP__ __DOMAIN__ __MAAS_API_KEY__ __MODELS_BLOCK__ __PROVIDERS_BLOCK__
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: __NAMESPACE__
+  labels:
+    opendatahub.io/dashboard: "true"
+    modelmesh-enabled: "false"
+  annotations:
+    openshift.io/display-name: "__TEAM__"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: __NAMESPACE__-edit
+  namespace: __NAMESPACE__
+subjects:
+  - kind: Group
+    apiGroup: rbac.authorization.k8s.io
+    name: __GROUP__
+roleRef:
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+  name: edit
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: maas-api-key
+  namespace: __NAMESPACE__
+type: Opaque
+stringData:
+  api-key: "__MAAS_API_KEY__"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llama-stack-config
+  namespace: __NAMESPACE__
+  labels:
+    ogx.io/server: genai-playground
+    ogx.io/watch: "true"
+    opendatahub.io/dashboard: "true"
+data:
+  config.yaml: |
+    version: "2"
+    distro_name: rh
+    apis:
+    - inference
+    - responses
+    - vector_io
+    providers:
+      inference:
+__PROVIDERS_BLOCK__
+      vector_io:
+      - provider_id: faiss
+        provider_type: inline::faiss
+        config:
+          persistence:
+            backend: kv_default
+            namespace: vector_io::faiss
+      responses:
+      - provider_id: builtin
+        provider_type: inline::builtin
+        config:
+          persistence:
+            responses:
+              backend: sql_default
+              table_name: openai_responses
+    registered_resources:
+      models:
+__MODELS_BLOCK__
+      vector_stores: []
+    external_providers_dir: /opt/app-root/.llama/providers.d
+    server:
+      port: 8321
+---
+apiVersion: ogx.io/v1beta1
+kind: OGXServer
+metadata:
+  name: genai-playground
+  namespace: __NAMESPACE__
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: "Playground __TEAM__"
+spec:
+  distribution:
+    name: rh
+  network:
+    port: 8321
+  overrideConfig:
+    key: config.yaml
+    name: llama-stack-config
+  workload:
+    overrides:
+      command:
+      - /bin/sh
+      - -c
+      - ogx run /etc/ogx/config.yaml --insecure
+      env:
+      - name: VLLM_TLS_VERIFY
+        value: "false"
+      - name: MAAS_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: maas-api-key
+            key: api-key
+      - name: HF_HUB_OFFLINE
+        value: "1"
+      - name: FAISS_STORE_DIR
+        value: /opt/app-root/src/.llama/faiss
+      - name: OGX_CONFIG_DIR
+        value: /opt/app-root/src/.ogx/distributions/rh/
+    replicas: 1
+    resources:
+      limits:
+        cpu: "1"
+        memory: 4Gi
+      requests:
+        cpu: 100m
+        memory: 500Mi

@@ -21,4 +21,6 @@ spec:
   subjects:
     groups:
       - name: scm-desarrolladores
-    users: []
+    users:
+      # el presentador (admin) tambien necesita acceso para demostrar desde la UI
+      - admin

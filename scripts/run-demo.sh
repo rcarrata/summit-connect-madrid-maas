@@ -52,7 +52,7 @@ fire_burst() {
         "$endpoint")
     fi
     case "$code" in
-      200) ok=$((ok+1)); tok=$((tok + $(jq -r '(.usage.total_tokens // ((.usage.input_tokens // 0) + (.usage.output_tokens // 0))) // 0' "$TMP/r" 2>/dev/null))) ;;
+      200) ok=$((ok+1)); tok=$((tok + $(jq -r '(.usage.total_tokens // ((.usage.input_tokens // 0) + (.usage.output_tokens // 0))) // 0' "$TMP/r" 2>/dev/null || echo 0))) ;;
       429) lim=$((lim+1)) ;;
       *)   other=$((other+1)) ;;
     esac

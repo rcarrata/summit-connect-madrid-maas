@@ -63,7 +63,11 @@ if [ -n "${OAUTH_BACKUP:-}" ] && [ -f "$OAUTH_BACKUP" ]; then
 else
   REMAINING=$(oc get oauth cluster -o json \
     | jq -c "[.spec.identityProviders[]? | select(.name != \"${IDP}\")]")
-  oc patch oauth cluster --type=merge -p "{\"spec\":{\"identityProviders\":${REMAINING}}}" 2>&1 | sed 's/^/  /'
+  if [ -n "$REMAINING" ] && echo "$REMAINING" | jq empty 2>/dev/null; then
+    oc patch oauth cluster --type=merge -p "{\"spec\":{\"identityProviders\":${REMAINING}}}" 2>&1 | sed 's/^/  /'
+  else
+    echo "  WARNING: could not build IDP list, skipping oauth patch (remove ${IDP} manually)"
+  fi
 fi
 
 echo "==> Removing OpenShell sandbox"

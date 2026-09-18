@@ -35,13 +35,17 @@ fi
 DOMAIN=$(detect_apps_domain)
 MAAS_GATEWAY="https://maas.${DOMAIN}"
 
+_TMPFILES=()
+_cleanup_tmp() { rm -f "${_TMPFILES[@]}"; }
+trap _cleanup_tmp EXIT
+
 info "Sandbox: ${SANDBOX_NAME}"
 info "MaaS gateway: ${MAAS_GATEWAY}"
 
 # --- render policy ---
 
 info "Rendering network policy"
-RENDERED_POLICY=$(mktemp)
+RENDERED_POLICY=$(mktemp); _TMPFILES+=("$RENDERED_POLICY")
 render_policy "${MANIFESTS}/policy-scm.yaml.template" "$RENDERED_POLICY" "$DOMAIN"
 
 # --- create sandbox ---
@@ -62,7 +66,7 @@ openshell sandbox exec --name "$SANDBOX_NAME" --no-tty -- \
 # --- upload OpenCode config ---
 
 info "Uploading OpenCode config (2 models: local + cloud)"
-RENDERED_CONFIG=$(mktemp)
+RENDERED_CONFIG=$(mktemp); _TMPFILES+=("$RENDERED_CONFIG")
 sed "s/__DOMAIN__/${DOMAIN}/g" "${MANIFESTS}/opencode-config.json" > "$RENDERED_CONFIG"
 openshell sandbox exec --name "$SANDBOX_NAME" --no-tty -- \
   mkdir -p /sandbox/.config/opencode
@@ -71,7 +75,7 @@ openshell sandbox upload "$SANDBOX_NAME" "$RENDERED_CONFIG" /sandbox/.config/ope
 # --- init script ---
 
 info "Creating init script with MaaS credentials"
-INIT_SCRIPT=$(mktemp)
+INIT_SCRIPT=$(mktemp); _TMPFILES+=("$INIT_SCRIPT")
 cat > "$INIT_SCRIPT" << 'INITEOF'
 #!/usr/bin/env bash
 [ "${SANDBOX_ENV_LOADED:-}" = "1" ] && return
@@ -93,7 +97,8 @@ echo ""
 echo "Ejecuta: opencode"
 echo ""
 INITEOF
-sed -i.bak "s|__MAAS_API_KEY__|${MAAS_API_KEY}|g" "$INIT_SCRIPT"
+ESCAPED_KEY=$(printf '%s\n' "$MAAS_API_KEY" | sed 's/[&/\]/\\&/g')
+sed -i.bak "s|__MAAS_API_KEY__|${ESCAPED_KEY}|g" "$INIT_SCRIPT"
 rm -f "${INIT_SCRIPT}.bak"
 
 openshell sandbox upload "$SANDBOX_NAME" "$INIT_SCRIPT" /sandbox/.sandbox-init.sh
@@ -118,6 +123,29 @@ else
   warn "MaaS gateway returned ${TEST_RESULT} - check network policy"
 fi
 
+# La lista de modelos vacia es el sintoma de una API key caducada: con una key
+# muerta el gateway responde 200 con {"data":[]} y luego 403 en la inferencia,
+# asi que OpenCode arranca pero no ve ningun modelo.
+MODEL_COUNT=$(openshell sandbox exec --name "$SANDBOX_NAME" --no-tty -- \
+  bash -lc 'curl -sk --max-time 15 -H "Authorization: Bearer $OPENAI_API_KEY" '"${MAAS_GATEWAY}"'/maas-api/v1/models' 2>/dev/null \
+  | grep -o '"id"' | wc -l | tr -d ' ')
+if [ "${MODEL_COUNT:-0}" -ge 1 ]; then
+  info "La API key ve ${MODEL_COUNT} modelo(s) desde el sandbox"
+else
+  error "La API key no ve ningun modelo: probablemente ha caducado. Crea otra en Gen AI studio > API keys (30 dias) y re-ejecuta este script."
+fi
+
+# OpenCode se instala en /sandbox/.npm-global, no en /usr/local/bin: si la
+# politica solo autoriza la ruta clasica, la inferencia falla con policy_denied.
+info "Comprobando que OpenCode puede llegar al gateway (policy check)"
+OC_OUT=$(openshell sandbox exec --name "$SANDBOX_NAME" --no-tty -- \
+  bash -lc 'cd /sandbox && opencode run --model local/gpt-oss-20b "responde solo: ok" 2>&1 | tail -3' 2>/dev/null | tail -3)
+if printf '%s' "$OC_OUT" | grep -qi 'policy_denied'; then
+  error "OpenCode bloqueado por la politica (policy_denied): revisa los binarios /sandbox/.npm-global/** en policy-scm.yaml.template"
+else
+  info "OpenCode responde con el modelo local"
+fi
+
 # --- network policy demo test ---
 
 info "Testing network policy (as.com vs marca.com)"
@@ -137,10 +165,6 @@ if [ "$MARCA_RESULT" = "blocked" ] || [ "$MARCA_RESULT" = "000" ]; then
 else
   warn "marca.com: HTTP ${MARCA_RESULT} (deberia estar bloqueado)"
 fi
-
-# --- cleanup temp files ---
-
-rm -f "$RENDERED_POLICY" "$RENDERED_CONFIG" "$INIT_SCRIPT"
 
 echo
 info "Sandbox ${SANDBOX_NAME} ready"
