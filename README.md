@@ -192,20 +192,16 @@ curl -sk -H "Authorization: Bearer $TOKEN" "${H}/maas-api/v1/models" | jq '.data
 **Demo**:
 1. Usar OpenCode con el modelo local (gpt-oss-20b) - pedir que genere un script
 2. Cambiar al modelo cloud (opus5-cloud) - pedir algo mas complejo
-3. Probar el acceso a internet:
-
+3. Desde OpenCode pedirle lo siguiente:
 ```bash
-# Dentro del sandbox
-curl -I https://as.com
-# 200 OK - noticias del Atletico
-
-curl -I https://marca.com
-# Connection refused - bloqueado!
+Conectate al periodico as.com y dime las últimas noticias relacionadas con el Atletico de Madrid
+```
+4. A continuación:
+```bash
+Ahora mira en marca.com
 ```
 
 > "Estamos en el estadio del Atletico. Aqui no se lee Marca."
-
-**(aplausos)**
 
 > "En serio - la politica de red controla que sitios puede acceder el sandbox. Solo lo que esta en la allowlist pasa. Todo lo demas esta bloqueado por defecto."
 
