@@ -241,30 +241,45 @@ opencode run --model cloud/opus5-cloud \
 > "Mismo agente, dos modelos, una sola credencial de plataforma. El desarrollador elige potencia; el CIO
 > sigue teniendo el limite de tokens."
 
-**La red del sandbox tambien es politica.** En vez de `curl`, que lo pruebe el propio agente:
+**La red del sandbox tambien es politica.** En vez de `curl`, que lo pruebe el propio agente. Pideselo en
+lenguaje natural, dentro del TUI de OpenCode (`opencode`), donde puedes aprobar los permisos de herramientas:
 
-```bash
-opencode run --model local/gpt-oss-20b \
-  "Usa tu herramienta de fetch para leer https://as.com y dime si has podido acceder"
-
-#   % WebFetch https://as.com
-#   Access successful, content retrieved.
-
-opencode run --model local/gpt-oss-20b \
-  "Ahora haz lo mismo con https://marca.com"
-
-#   ✗ WebFetch https://marca.com failed
-#   Error: StatusCode: non 2xx status code (403 GET https://marca.com)
-#   403 Forbidden - access was blocked.
+```
+Conectate al periodico as.com y dime las ultimas noticias relacionadas con el Atletico de Madrid
 ```
 
-(Salida real de este cluster: el agente accede a AS y recibe un 403 del **sandbox** al intentar Marca.)
+```
+Ahora mira en marca.com
+```
+
+Salida real de este cluster:
+
+```
+%  WebFetch https://as.com
+   Access successful, content retrieved.
+
+✗  WebFetch https://marca.com failed
+   Error: StatusCode: non 2xx status code (403 GET https://marca.com)
+   403 Forbidden - access was blocked.
+```
+
+El agente entra en AS y, al intentar Marca, recibe un **403 del propio sandbox**, no del periodico.
 
 > "Estamos en el estadio del Atletico. Aqui no se lee Marca."
 >
 > "En serio: es deny-by-default. La allowlist tiene el gateway de MaaS, npm, PyPI, GitHub en solo-lectura
 > y as.com. Todo lo demas se bloquea en el sandbox, no en el destino. Y el agente no puede saltarselo
 > porque la politica se aplica por binario y por metodo HTTP, fuera del proceso del agente."
+
+**Dos avisos de ensayo** (comprobados en este cluster):
+
+- Usa el **TUI**, no `opencode run`. En modo no interactivo las peticiones de permiso se auto-rechazan
+  (`permission requested: external_directory (/*); auto-rejecting`) y el agente se queda a medias. Y sin
+  el contexto de la conversacion, "Ahora mira en marca.com" lo interpreta como buscar un fichero local,
+  con lo que nunca sale a la red y te pierdes el 403.
+- El titular lo lee, pero gpt-oss-20b se atraganta con el HTML gigante de la portada de AS y a veces
+  concluye que no encuentra noticias del Atletico. Lo que hay que ensenar es **el acceso**, no el resumen:
+  si quieres el titular fino, pregunta por una URL de seccion concreta o cambia a `cloud/opus5-cloud`.
 
 ### Cierre (30 seg)
 
