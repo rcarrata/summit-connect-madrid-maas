@@ -27,20 +27,19 @@ echo "==> Removing auth policies"
 oc delete -f "${MANIFESTS}/02-governance/auth-policies.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
 
 echo "==> Removing MaaSModelRef"
-oc delete -f "${MANIFESTS}/01-models/opus5-cloud/04-maas-model-ref.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
+oc delete -f "${MANIFESTS}/01-models/cloud-openai/06-external-model-gpt41.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
+oc delete -f "${MANIFESTS}/01-models/cloud-openai/04-maas-model-ref.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
 
-echo "==> Removing compat HTTPRoute"
-oc delete -f "${MANIFESTS}/01-models/opus5-cloud/05-httproute-compat.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
 
 echo "==> Removing ExternalModel + ExternalProvider"
-oc delete -f "${MANIFESTS}/01-models/opus5-cloud/03-external-model.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
-oc delete -f "${MANIFESTS}/01-models/opus5-cloud/02-external-provider.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
+oc delete -f "${MANIFESTS}/01-models/cloud-openai/03-external-model.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
+oc delete -f "${MANIFESTS}/01-models/cloud-openai/02-external-provider.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
 
-echo "==> Removing ABSK secret"
-oc delete secret anthropic-mantle-api-key -n external-models --ignore-not-found 2>&1 | sed 's/^/  /'
+echo "==> Removing OpenAI API key secret"
+oc delete secret openai-api-key -n external-models --ignore-not-found 2>&1 | sed 's/^/  /'
 
 echo "==> Removing external-models namespace"
-oc delete -f "${MANIFESTS}/01-models/opus5-cloud/00-namespace.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
+oc delete -f "${MANIFESTS}/01-models/cloud-openai/00-namespace.yaml" --ignore-not-found 2>&1 | sed 's/^/  /'
 
 echo "==> Removing groups"
 for grp in $GROUP_DEV $GROUP_SALES; do

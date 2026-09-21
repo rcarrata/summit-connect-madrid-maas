@@ -18,7 +18,7 @@ Demo de 20 minutos en el estadio del Atletico de Madrid.
 Una empresa tiene dos equipos que necesitan modelos de IA: **Desarrolladores** y **Ventas**. El CIO tiene tres prioridades:
 
 1. **Soberania de datos**: hay un modelo local (gpt-oss-20b) en GPU propia; los datos no salen del cluster.
-2. **Potencia cuando se necesita**: un modelo cloud (Claude Opus 5) disponible bajo demanda.
+2. **Potencia cuando se necesita**: modelos cloud de OpenAI (gpt-5.5 y gpt-4.1) disponibles bajo demanda.
 3. **Control de costes**: el cloud es caro. Solo Desarrolladores lo usa, y con limites estrictos.
 
 La plataforma lo garantiza: nadie tiene que "portarse bien" manualmente.
@@ -29,27 +29,32 @@ La plataforma lo garantiza: nadie tiene que "portarse bien" manualmente.
                     ┌─────────────────────────────────────────┐
                     │            MaaS Gateway                 │
                     │   maas.apps.ocp.xxx.opentlc.com         │
+                    │        POST /v1/chat/completions        │
                     └──────────┬───────────────┬──────────────┘
                                │               │
-                    ┌──────────▼──────┐  ┌─────▼──────────────┐
-                    │  gpt-oss-20b    │  │  opus5-cloud       │
-                    │  (GPU local)    │  │  (Cloud - Opus 5)  │
-                    │  namespace: llm │  │  ns: external-     │
-                    │  vLLM en L40S   │  │      models        │
-                    └─────────────────┘  └────────────────────┘
+                    ┌──────────▼──────┐  ┌─────▼──────────────────┐
+                    │  gpt-oss-20b    │  │  gpt-5.5 / gpt-4.1     │
+                    │  (GPU local)    │  │  (OpenAI, cloud)       │
+                    │  namespace: llm │  │  ns: external-models   │
+                    │  vLLM en L40S   │  │  ExternalModel         │
+                    └─────────────────┘  └────────────────────────┘
 ```
 
 ## Matriz de acceso
 
-| Equipo | gpt-oss-20b (local) | opus5-cloud (cloud) |
-|--------|:-------------------:|:-------------------:|
-| **Desarrolladores** | 50k tok/min | 2k tok/min |
-| **Ventas** | 20k tok/min | Sin acceso (403) |
-| **admin** (presentador) | 50k tok/min | 2k tok/min |
+| Equipo | gpt-oss-20b (local) | gpt-5.5 (cloud) | gpt-4.1 (cloud, agentes) |
+|--------|:-------------------:|:---------------:|:------------------------:|
+| **Desarrolladores** | 50k tok/min | 2k tok/min | 20k tok/min |
+| **Ventas** | 20k tok/min | Sin acceso (403) | Sin acceso (403) |
+| **admin** (presentador) | 50k tok/min | 2k tok/min | 20k tok/min |
 
-El limite del cloud es 25x mas bajo que el del local, y esta puesto bajo a proposito: con 2.000 tokens/min
-dos o tres peticiones reales de OpenCode ya devuelven **429**, que es lo que hay que ver en directo. El CIO
-controla el gasto sin quitar funcionalidad.
+Dos modelos cloud a proposito:
+
+- **gpt-5.5** es el modelo caro de la narrativa: limite bajo (2.000 tok/min) para que el **429** salte en
+  directo con dos o tres preguntas. Se usa en el playground y por API.
+- **gpt-4.1** es el que usa **OpenCode** en el sandbox. OpenCode inyecta parametros de razonamiento
+  (`reasoningSummary`) para cualquier id de la familia `gpt-5` y `/v1/chat/completions` los rechaza con
+  `400 Unknown parameter`. Ver [Troubleshooting](#troubleshooting).
 
 > `admin` esta incluido a proposito: en MaaS la visibilidad de modelos va por **suscripcion + politica de
 > autorizacion**, no por ser cluster-admin. Si el presentador no esta en ninguna suscripcion, la UI de MaaS
@@ -82,29 +87,39 @@ oc apply -k manifests/01-models/gpt-oss-20b/maas   # MaaSModelRef + auth policy 
 oc get llminferenceservice -n llm -w      # espera READY=True (~10 min, descarga modelcar 8GB)
 ```
 
-### 3. Clave ABSK para el modelo cloud (~5 min)
+### 3. Clave de OpenAI para los modelos cloud (~2 min)
 
-**La ABSK caduca.** Si la demo se preparo hace mas de un dia, hay que regenerarla o el modelo cloud
-devolvera `401 authentication_error` (el error viene de Anthropic, no de MaaS).
+Hace falta una clave de OpenAI (`sk-...`, `sk-proj-...` o de service account) con acceso a `gpt-5.5` y
+`gpt-4.1`. Comprueba que la clave los tiene antes de la demo - una service account puede listar modelos
+que luego no puede usar:
 
 ```bash
-export AWS_ACCESS_KEY_ID=<key> AWS_SECRET_ACCESS_KEY=<secret>
-cd z-collateral
-./provision-bedrock-anthropic.sh --models anthropic.claude-opus-5 --region us-east-1
+export OPENAI_API_KEY='sk-...'
+for m in gpt-5.5 gpt-4.1; do
+  echo -n "$m -> "
+  curl -s -o /dev/null -w '%{http_code}\n' https://api.openai.com/v1/chat/completions \
+    -H "Authorization: Bearer $OPENAI_API_KEY" -H 'Content-Type: application/json' \
+    -d "{\"model\":\"$m\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_completion_tokens\":20}"
+done
+# 200 en los dos
+```
 
-# refrescar el secret que usa el ExternalProvider
-oc create secret generic anthropic-mantle-api-key -n external-models \
-  --from-literal=api-key='ABSK...' --dry-run=client -o yaml | oc apply -f -
-oc label secret anthropic-mantle-api-key -n external-models inference.llm-d.ai/ipp-managed=true --overwrite
+El secret lo crea `setup-demo.sh`. Si lo haces a mano:
+
+```bash
+oc create secret generic openai-api-key -n external-models \
+  --from-literal=api-key="$OPENAI_API_KEY" --dry-run=client -o yaml | oc apply -f -
+oc label secret openai-api-key -n external-models inference.llm-d.ai/ipp-managed=true --overwrite
 ```
 
 ### 4. Desplegar la demo (~5 min)
 
 ```bash
-DEMO_PASSWORD='redhat123' ABSK_KEY='ABSK...' ./scripts/setup-demo.sh
+DEMO_PASSWORD='redhat123' OPENAI_API_KEY='sk-...' ./scripts/setup-demo.sh
 ```
 
-Crea usuarios (`desarrollador-1`, `vendedor-1`), grupos, el modelo externo, las politicas y las suscripciones.
+Crea usuarios (`desarrollador-1`, `vendedor-1`), grupos, los modelos cloud, las politicas, las
+suscripciones y el proyecto de cada equipo.
 
 ### 5. Sandbox con OpenCode (~10 min)
 
@@ -118,14 +133,27 @@ Genera la API key del sandbox **en la UI** (Gen AI studio → API keys → Creat
 MAAS_API_KEY='sk-oai-...' ./scripts/setup-sandbox.sh
 ```
 
-### 6. Comprobacion previa (obligatoria)
+### 6. Kueue en los proyectos (si sale el banner)
+
+Si el proyecto de un equipo muestra *"Kueue is disabled in this cluster"*:
+
+```bash
+oc patch odhdashboardconfig odh-dashboard-config -n redhat-ods-applications \
+  --type merge -p '{"spec":{"dashboardConfig":{"disableKueue":false}}}'
+```
+
+Recarga **sin cache** (Cmd+Shift+R o pestaña nueva): con un F5 normal el banner sigue apareciendo.
+
+![Proyecto sin el banner de Kueue](docs/images/16-project-kueue-banner-fixed.png)
+
+### 7. Comprobacion previa (obligatoria)
 
 ```bash
 ./scripts/check-demo.sh
 ```
 
-Valida los cuatro fallos que rompen la demo en directo: modelo local caido, ABSK caducada,
-API key de MaaS caducada y politica del sandbox que bloquea a OpenCode.
+Valida de golpe: modelos Ready, presentador con suscripcion, inferencia local y cloud (con reintento por
+la conexion en frio) y OpenCode dentro del sandbox contra el modelo local **y** el cloud.
 
 ---
 
@@ -147,14 +175,14 @@ Sub-pestaña **Internal models**: el modelo local, servido con llm-d sobre GPU.
 ![Modelo local en el dashboard](docs/images/03-deployments-internal-gpt-oss.png)
 
 Sub-pestaña **External models** (Tech Preview) → en el selector **Project** elige `external-models`:
-aparece `opus5-cloud` con su provider `anthropic-mantle` en estado `Ready`.
+aparecen `gpt-5.5` y `gpt-4.1` con su provider `openai` en estado `Ready`.
 
-![Modelo cloud registrado](docs/images/04-deployments-external-opus5.png)
+![Modelos cloud registrados](docs/images/04-deployments-external-cloud.png)
 
 **UI**: `Gen AI studio` → `AI asset endpoints` → proyecto `sandbox-scm`. Los dos modelos, en la misma lista,
 con el mismo ciclo de vida y el mismo endpoint de gateway:
 
-![AI asset endpoints con los dos modelos](docs/images/11-ai-asset-endpoints.png)
+![AI asset endpoints con los tres modelos](docs/images/11-ai-asset-endpoints.png)
 
 > "Local y cloud son el mismo tipo de activo para la plataforma. La gobernanza no distingue donde corre el modelo."
 
@@ -165,7 +193,7 @@ con el mismo ciclo de vida y el mismo endpoint de gateway:
 ![Suscripciones MaaS](docs/images/01-maas-governance-subscriptions.png)
 
 Pestaña `Authorization policies`: quien puede acceder a que. `gpt-oss-20b` para todos los autenticados,
-`opus5-cloud` solo para el grupo `scm-desarrolladores`:
+los modelos cloud solo para el grupo `scm-desarrolladores`:
 
 ![Politicas de autorizacion](docs/images/02-maas-governance-authpolicies.png)
 
@@ -176,9 +204,9 @@ Ahora el mismo cluster, visto por cada equipo. **Logout** y entra con el IdP `sc
 
 ![Ventas ve un modelo](docs/images/09-ventas-subscription-1-model.png)
 
-`desarrollador-1` (`redhat123`), misma pantalla: **dos modelos**, 50.000 y 10.000 tok/min.
+`desarrollador-1` (`redhat123`), misma pantalla: **tres modelos**, con 50.000 / 2.000 / 20.000 tok/min.
 
-![Desarrolladores ve dos modelos](docs/images/05-dev-subscription-2-models.png)
+![Desarrolladores ve tres modelos](docs/images/05-dev-subscription-models.png)
 
 > "Ventas ve un modelo. Desarrolladores ven dos. La misma plataforma, distintos permisos, cero configuracion
 > en el cliente."
@@ -195,18 +223,19 @@ Como `desarrollador-1`, crea la API key del sandbox delante del publico:
 > revocable y solo abre los modelos de su suscripcion."
 
 **Inferencia en vivo, sin terminal**: `Gen AI studio` → `Playground` → proyecto `Proyecto Desarrolladores`.
-En `Settings` elige el modelo (`gpt-oss-20b` o `opus5-cloud`) y la suscripcion del equipo, y pregunta algo.
+En `Settings` elige el modelo (`gpt-oss-20b`, `gpt-5.5` o `gpt-4.1`) y la suscripcion del equipo, y pregunta algo.
 El panel muestra tokens y T/s, que es justo lo que la suscripcion esta limitando.
 
-![Playground con el modelo local](docs/images/14-playground-dev-local-model.png)
+![Playground con el modelo cloud](docs/images/14-playground-cloud-model.png)
 
-**Rate limiting en vivo**: en el mismo playground cambia el modelo a `opus5-cloud` y lanza dos o tres
+**Rate limiting en vivo**: en el mismo playground cambia el modelo a `gpt-5.5` y lanza dos o tres
 preguntas seguidas. Con 2.000 tokens/min la suscripcion se agota enseguida y la UI devuelve el error del
 gateway (`429 Too Many Requests`). Comportamiento verificado en este cluster bajando el limite a 300
 tokens/min: la primera peticion devuelve `200` y de la segunda en adelante `429`.
 
-> El 429 del modelo cloud solo se ve si la ABSK es valida: el contador de tokens se alimenta de las
-> respuestas del proveedor, asi que con la ABSK caducada nunca se llega al limite (solo se ven 401/503).
+> Para que el 429 funcione el trafico tiene que ir por la HTTPRoute que genera MaaS (la que apunta el
+> `TokenRateLimitPolicy`), es decir por `POST /v1/chat/completions` con el nombre del modelo en el body.
+> Comprobado: peticiones 1-11 en `200` y la 12 en `429`.
 
 > "Nadie ha tenido que portarse bien. El equipo puede pedir lo que quiera; el gasto lo corta la plataforma."
 
@@ -223,7 +252,7 @@ openshell sandbox exec --gateway scm-demo --name opencode-scm --tty -- bash -l
 ```
 
 Dentro, todo con **OpenCode**. La key de MaaS ya esta inyectada en el entorno, y los dos modelos estan
-declarados como providers (`local/gpt-oss-20b` y `cloud/opus5-cloud`), asi que cambiar de modelo es
+declarados como providers (`local/gpt-oss-20b` y `cloud/gpt-4.1`), asi que cambiar de modelo es
 `/models` en el TUI o `--model` en la CLI:
 
 ```bash
@@ -234,7 +263,7 @@ opencode run --model local/gpt-oss-20b \
   "Escribe un script en bash que resuma los goles del Atletico de esta temporada leyendo as.com"
 
 # el mismo prompt contra el modelo cloud (solo desarrolladores):
-opencode run --model cloud/opus5-cloud \
+opencode run --model cloud/gpt-4.1 \
   "Refactoriza ese script con manejo de errores y tests"
 ```
 
@@ -279,7 +308,7 @@ El agente entra en AS y, al intentar Marca, recibe un **403 del propio sandbox**
   con lo que nunca sale a la red y te pierdes el 403.
 - El titular lo lee, pero gpt-oss-20b se atraganta con el HTML gigante de la portada de AS y a veces
   concluye que no encuentra noticias del Atletico. Lo que hay que ensenar es **el acceso**, no el resumen:
-  si quieres el titular fino, pregunta por una URL de seccion concreta o cambia a `cloud/opus5-cloud`.
+  si quieres el titular fino, pregunta por una URL de seccion concreta o cambia a `cloud/gpt-4.1`.
 
 ### Cierre (30 seg)
 
@@ -308,7 +337,7 @@ Camino en la UI:
 2. `Gen AI studio` → `Playground` → selecciona el proyecto.
 3. En `Settings` del playground: elige **Model** y **Subscription** (la suscripcion del equipo).
 
-![Playground del equipo de Desarrolladores](docs/images/14-playground-dev-local-model.png)
+![Playground del equipo de Desarrolladores](docs/images/14-playground-cloud-model.png)
 
 El playground pasa por el gateway de MaaS con la suscripcion del equipo, asi que la matriz de acceso se ve
 sin tocar nada mas: en el proyecto de Ventas el modelo cloud no esta disponible; en el de Desarrolladores si.
@@ -322,13 +351,13 @@ manifests/
     gpt-oss-20b/                        Local, en GPU (kustomize, de rhoai-maas-guide)
       llm/                                LLMInferenceService (vLLM CUDA)
       maas/                               MaaSModelRef, auth policy y suscripciones base
-    opus5-cloud/                        Cloud, via Bedrock-Mantle (aplicar en orden)
+    cloud-openai/                       Cloud, OpenAI (aplicar en orden)
       00-namespace.yaml                   Namespace con labels de gateway
-      01-secret-absk.yaml                 Secret de la ABSK (REPLACE_ME)
-      02-external-provider.yaml           ExternalProvider (anthropic-mantle)
-      03-external-model.yaml              ExternalModel: opus5-cloud
+      01-secret-openai.yaml               Secret de la clave OpenAI (REPLACE_ME)
+      02-external-provider.yaml           ExternalProvider (openai -> api.openai.com)
+      03-external-model.yaml              ExternalModel: gpt-5.5
       04-maas-model-ref.yaml              MaaSModelRef que lo publica en el gateway
-      05-httproute-compat.yaml            Compat HTTPRoute (fix del rewrite de ext-proc)
+      06-external-model-gpt41.yaml        ExternalModel + MaaSModelRef: gpt-4.1 (OpenCode)
   02-governance/                      Quien accede a que, y con que limites
     auth-policies.yaml                  Cloud: grupo desarrolladores + admin
     subscriptions.yaml                  Limites por equipo (priority 30)
@@ -365,11 +394,16 @@ Los cuatro fallos reales que hemos visto en este cluster, con su sintoma exacto:
 
 | Sintoma | Causa | Arreglo |
 |---|---|---|
-| La UI de MaaS muestra **0 modelos** al presentador; `/maas-api/v1/models` devuelve `{"data":[]}` | La visibilidad va por suscripcion + politica de autorizacion. Ser `cluster-admin` no da acceso | Añade el usuario a `spec.owner.users` de la suscripcion y a `spec.subjects.users` de la `MaaSAuthPolicy` (ojo: son listas de **strings**, no de objetos). Ya incluido en `02-governance/subscriptions.yaml` y `02-governance/auth-policies.yaml` |
-| En **External models** no aparece `opus5-cloud` | El selector **Project** esta en `ai-tenants` | Cambia el proyecto a `external-models` |
-| El modelo cloud devuelve `401 authentication_error` con `"type":"error"` de Anthropic | La **ABSK** del `ExternalProvider` ha caducado. MaaS enruta bien; el 401 lo da el proveedor | Regenera la ABSK y actualiza el secret `anthropic-mantle-api-key` (paso 3) |
-| Dentro del sandbox, OpenCode no ve ningun modelo; `curl` al gateway devuelve `403` y la lista de modelos sale vacia | La **API key de MaaS caducada** (las creadas con `expiresIn: 24h` mueren al dia siguiente) | Crea una nueva en la UI con 30 dias y re-ejecuta `setup-sandbox.sh` (o actualiza `/sandbox/.sandbox-init.sh`) |
-| OpenCode falla con `Error: Forbidden: policy_denied` pero `curl` al mismo endpoint funciona | La politica del sandbox autoriza binarios por ruta y OpenCode se instala en `/sandbox/.npm-global/...`, no en `/usr/local/bin/opencode` | Ya corregido en `04-sandbox/policy-scm.yaml.template` (`/sandbox/.npm-global/**` y `/sandbox/.cache/opencode/**`). Recarga en caliente: `openshell policy set --policy <file> --wait <sandbox>` |
+| La UI de MaaS muestra **0 modelos** al presentador; `/maas-api/v1/models` devuelve `{"data":[]}` | La visibilidad va por suscripcion + politica de autorizacion. Ser `cluster-admin` no da acceso | Añade el usuario a `spec.owner.users` de la suscripcion y a `spec.subjects.users` de la `MaaSAuthPolicy` (son listas de **strings**, no de objetos) |
+| En **External models** no aparece el modelo cloud | El selector **Project** esta en `ai-tenants` | Cambia el proyecto a `external-models` |
+| El modelo cloud da `404` y en los logs del gateway se ve `via_upstream` con el path completo | El `ExternalModel` se llamaba distinto que el modelo del proveedor. La HTTPRoute generada casa por header `X-Gateway-Model-Name: <targetModel>` mientras el ext-proc resuelve el alias, y nada reescribe el prefijo `/external-models/<name>` | El `ExternalModel` (y `modelName`) tiene que llamarse **exactamente igual** que `targetModel`, como en rhoai-maas-guide, y los clientes usan `POST /v1/chat/completions` con el modelo en el body |
+| `400 Unsupported parameter: 'max_tokens' is not supported with this model` | `gpt-5.5` solo acepta `max_completion_tokens` | Cambia el parametro; `gpt-4.1` acepta los dos |
+| OpenCode con un modelo cloud `gpt-5.*` falla con `400 Unknown parameter: 'reasoningSummary'` | OpenCode inyecta parametros de razonamiento para todo id de la familia gpt-5 (metadatos de models.dev). No se desactiva con `reasoning: false`, `options: {}` ni `npm: @ai-sdk/openai-compatible` | Usa `gpt-4.1` para el agente (ya configurado en `04-sandbox/opencode-config.json`) |
+| La **primera** peticion al modelo cloud devuelve `503 upstream connect error` y las siguientes `200` | Envoy tiene que levantar la conexion TLS con el proveedor externo | Calienta el modelo con una peticion antes de salir al escenario; `check-demo.sh` reintenta una vez |
+| Dentro del sandbox, OpenCode no ve ningun modelo; `curl` al gateway devuelve `403` y la lista sale vacia | **API key de MaaS caducada** (las de `expiresIn: 24h` mueren al dia siguiente) | Crea otra en la UI con 30 dias y re-ejecuta `setup-sandbox.sh` |
+| OpenCode falla con `Error: Forbidden: policy_denied` pero `curl` al mismo endpoint funciona | La politica del sandbox autoriza binarios por ruta y OpenCode vive en `/sandbox/.npm-global/...` | Ya corregido en `04-sandbox/policy-scm.yaml.template`. Recarga en caliente: `openshell policy set --policy <file> --wait <sandbox>` |
+| El proyecto muestra el banner *"Kueue is disabled in this cluster"* | `OdhDashboardConfig` tiene `disableKueue: true` y el namespace lleva `kueue.openshift.io/managed` | `oc patch odhdashboardconfig odh-dashboard-config -n redhat-ods-applications --type merge -p '{"spec":{"dashboardConfig":{"disableKueue":false}}}'` y **recarga sin cache** (con F5 normal el banner sigue) |
+| Desde el workbench, `openshell gateway add http://openshell:8080` dice *Gateway is not reachable* y luego *dns error* | El gateway vive en el namespace `sandbox-scm`, no en el del workbench, y sirve **TLS con mTLS** | Usa el FQDN `https://openshell.sandbox-scm.svc.cluster.local:8080` y copia el material mTLS del cliente, o conecta desde el portatil del presentador |
 
 ## Limpiar
 

@@ -4,8 +4,8 @@
 # la API key de MaaS del equipo, asi que el playground SOLO puede ver los modelos
 # que la suscripcion del equipo permite:
 #
-#   playground-desarrolladores -> gpt-oss-20b + opus5-cloud
-#   playground-ventas          -> gpt-oss-20b  (opus5-cloud da 403)
+#   playground-desarrolladores -> gpt-oss-20b + gpt-5.5
+#   playground-ventas          -> gpt-oss-20b  (gpt-5.5 da 403)
 #
 # Placeholders: __NAMESPACE__ __TEAM__ __GROUP__ __DOMAIN__ __MAAS_API_KEY__ __MODELS_BLOCK__ __PROVIDERS_BLOCK__
 ---

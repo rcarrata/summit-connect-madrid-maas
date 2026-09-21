@@ -1,0 +1,19 @@
+# Proveedor cloud: OpenAI nativo.
+#
+# Se eligio OpenAI y no Anthropic/Bedrock-Mantle a proposito: con apiFormat
+# openai-chat contra un endpoint OpenAI el ext-proc de MaaS no traduce el
+# payload, asi que pasan tools, tool_choice y stream_options. Con el proveedor
+# Anthropic habia que traducir y se rompia todo cliente real (OpenCode manda
+# tools; el playground manda stream_options). Ver README > Troubleshooting.
+apiVersion: inference.opendatahub.io/v1alpha1
+kind: ExternalProvider
+metadata:
+  name: openai
+  namespace: external-models
+spec:
+  provider: openai
+  endpoint: api.openai.com
+  auth:
+    type: apikey
+    secretRef:
+      name: openai-api-key

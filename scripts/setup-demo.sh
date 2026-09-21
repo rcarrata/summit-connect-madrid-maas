@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Summit Connect Madrid: desplegar gobernanza MaaS para la demo.
 #
-# Crea usuarios htpasswd, grupos, modelo externo (Opus 5 cloud),
+# Crea usuarios htpasswd, grupos, modelo externo (GPT-5.5 cloud),
 # politicas de acceso y suscripciones con limites por equipo.
 #
 # Requisitos previos:
 #   - Cluster con MaaS desplegado (setup-maas.sh --model gpt-oss-20b --with-observability)
 #   - gpt-oss-20b MaaSModelRef en estado Ready
-#   - Clave ABSK de Bedrock (provision-bedrock-anthropic.sh)
+#   - Clave de OpenAI con acceso a gpt-5.5 (platform.openai.com)
 #
 # Uso:
 #   ./setup-demo.sh
-#   DEMO_PASSWORD='s3cret' ABSK_KEY='ABSK...' ./setup-demo.sh
+#   DEMO_PASSWORD='s3cret' OPENAI_API_KEY='OpenAI API key...' ./setup-demo.sh
 #
 # Revertir con ./cleanup-demo.sh
 set -euo pipefail
@@ -57,12 +57,12 @@ if [ -z "${DEMO_PASSWORD:-}" ]; then
 fi
 [ -n "$DEMO_PASSWORD" ] || { echo "empty password"; exit 1; }
 
-# --- ABSK key ---
+# --- OpenAI API key ---
 
-if [ -z "${ABSK_KEY:-}" ]; then
-  read -rsp "ABSK key for Opus 5 (Bedrock): " ABSK_KEY; echo
+if [ -z "${OPENAI_API_KEY:-}" ]; then
+  read -rsp "OpenAI API key (para gpt-5.5): " OPENAI_API_KEY; echo
 fi
-[ -n "$ABSK_KEY" ] || { echo "empty ABSK key"; exit 1; }
+[ -n "$OPENAI_API_KEY" ] || { echo "empty OpenAI API key"; exit 1; }
 
 # --- oauth backup ---
 
@@ -101,30 +101,29 @@ echo "  ${GROUP_SALES}: ${USERS_SALES[*]}"
 # --- external-models namespace ---
 
 echo "==> Creating external-models namespace"
-oc apply -f "${MANIFESTS}/01-models/opus5-cloud/00-namespace.yaml"
+oc apply -f "${MANIFESTS}/01-models/cloud-openai/00-namespace.yaml"
 
-# --- ABSK secret ---
+# --- OpenAI API key secret ---
 
-echo "==> Creating ABSK secret for Opus 5"
-oc create secret generic anthropic-mantle-api-key \
-  --from-literal=api-key="$ABSK_KEY" -n external-models \
+echo "==> Creating OpenAI API key secret for GPT-5.5"
+oc create secret generic openai-api-key \
+  --from-literal=api-key="$OPENAI_API_KEY" -n external-models \
   --dry-run=client -o yaml | oc apply -f -
-oc label secret anthropic-mantle-api-key -n external-models \
+oc label secret openai-api-key -n external-models \
   inference.llm-d.ai/ipp-managed=true --overwrite
 
 # --- external model ---
 
-echo "==> Deploying ExternalProvider + ExternalModel (Opus 5 Cloud)"
-oc apply -f "${MANIFESTS}/01-models/opus5-cloud/02-external-provider.yaml"
-oc apply -f "${MANIFESTS}/01-models/opus5-cloud/03-external-model.yaml"
+echo "==> Deploying ExternalProvider + ExternalModel (GPT-5.5 Cloud)"
+oc apply -f "${MANIFESTS}/01-models/cloud-openai/02-external-provider.yaml"
+oc apply -f "${MANIFESTS}/01-models/cloud-openai/03-external-model.yaml"
 
 # --- MaaSModelRef ---
 
-echo "==> Applying MaaSModelRef for opus5-cloud"
-oc apply -f "${MANIFESTS}/01-models/opus5-cloud/04-maas-model-ref.yaml"
+echo "==> Applying MaaSModelRef for gpt-5.5"
+oc apply -f "${MANIFESTS}/01-models/cloud-openai/04-maas-model-ref.yaml"
+oc apply -f "${MANIFESTS}/01-models/cloud-openai/06-external-model-gpt41.yaml"
 
-echo "==> Applying compat HTTPRoute for Bedrock Mantle path rewrite"
-oc apply -f "${MANIFESTS}/01-models/opus5-cloud/05-httproute-compat.yaml"
 
 # --- auth policies and subscriptions ---
 
@@ -148,17 +147,17 @@ oc apply -f "${MANIFESTS}/03-projects/team-projects.yaml"
 
 # --- wait for MaaSModelRef Ready ---
 
-echo "==> Waiting for opus5-cloud MaaSModelRef to reach Ready (up to 3 min)..."
+echo "==> Waiting for gpt-5.5 MaaSModelRef to reach Ready (up to 3 min)..."
 timeout=180; elapsed=0
 while true; do
-  phase=$(oc get maasmodelref opus5-cloud -n external-models -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+  phase=$(oc get maasmodelref gpt-5.5 -n external-models -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
   if [ "$phase" = "Ready" ]; then
-    echo "  opus5-cloud: Ready"
+    echo "  gpt-5.5: Ready"
     break
   fi
   if [ "$elapsed" -ge "$timeout" ]; then
-    echo "  WARNING: opus5-cloud still in phase '${phase}' after ${timeout}s"
-    echo "  Check: oc get maasmodelref opus5-cloud -n external-models -o yaml"
+    echo "  WARNING: gpt-5.5 still in phase '${phase}' after ${timeout}s"
+    echo "  Check: oc get maasmodelref gpt-5.5 -n external-models -o yaml"
     break
   fi
   sleep 5; elapsed=$((elapsed+5))

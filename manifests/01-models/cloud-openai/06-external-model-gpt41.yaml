@@ -1,0 +1,37 @@
+# Segundo modelo cloud, para el agente de codigo.
+#
+# Por que dos: OpenCode inyecta parametros de razonamiento (reasoningSummary,
+# reasoningEffort) para todo id de la familia gpt-5 segun los metadatos de
+# models.dev, y /v1/chat/completions los rechaza con
+#   400 Unknown parameter: 'reasoningSummary'
+# No se puede desactivar desde la config de OpenCode (probado con
+# reasoning: false, options: {} y npm: @ai-sdk/openai-compatible).
+#
+# gpt-5.5  -> playground, API, narrativa de gobernanza
+# gpt-4.1  -> OpenCode en el sandbox (no es familia gpt-5, no inyecta nada)
+apiVersion: inference.opendatahub.io/v1alpha1
+kind: ExternalModel
+metadata:
+  name: gpt-4.1
+  namespace: external-models
+spec:
+  modelName: gpt-4.1
+  externalProviderRefs:
+    - ref:
+        name: openai
+      targetModel: gpt-4.1
+      apiFormat: openai-chat
+      path: /v1/chat/completions
+---
+apiVersion: maas.opendatahub.io/v1alpha1
+kind: MaaSModelRef
+metadata:
+  name: gpt-4.1
+  namespace: external-models
+  annotations:
+    openshift.io/display-name: "GPT-4.1 (Cloud, agentes)"
+    openshift.io/description: "Modelo cloud para el agente de codigo - solo desarrolladores"
+spec:
+  modelRef:
+    kind: ExternalModel
+    name: gpt-4.1

@@ -1,12 +1,12 @@
 apiVersion: maas.opendatahub.io/v1alpha1
 kind: MaaSModelRef
 metadata:
-  name: opus5-cloud
+  name: gpt-5.5
   namespace: external-models
   annotations:
-    openshift.io/display-name: "Claude Opus 5 (Cloud)"
+    openshift.io/display-name: "GPT-5.5 (Cloud)"
     openshift.io/description: "Modelo cloud de alta capacidad - solo para desarrolladores"
 spec:
   modelRef:
     kind: ExternalModel
-    name: opus5-cloud
+    name: gpt-5.5

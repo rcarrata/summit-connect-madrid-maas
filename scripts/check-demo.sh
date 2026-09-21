@@ -3,7 +3,7 @@
 #
 # Valida los fallos que hemos visto romper la demo en directo:
 #   1. modelo local no Ready
-#   2. modelo cloud registrado pero con ABSK caducada (401 del proveedor)
+#   2. modelo cloud registrado pero con OpenAI API key caducada (401 del proveedor)
 #   3. API key de MaaS caducada (403 y lista de modelos vacia)
 #   4. sandbox: OpenCode bloqueado por la politica de red (policy_denied)
 #
@@ -28,7 +28,7 @@ echo "== 1. Modelos y gobernanza =="
 [ "$(oc get llminferenceservice gpt-oss-20b -n llm -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" = "True" ] \
   && ok "gpt-oss-20b Ready" || bad "gpt-oss-20b NO esta Ready (oc get llminferenceservice -n llm)"
 
-for ref in llm/gpt-oss-20b external-models/opus5-cloud; do
+for ref in llm/gpt-oss-20b external-models/gpt-5.5 external-models/gpt-4.1; do
   ns="${ref%%/*}"; name="${ref##*/}"
   [ "$(oc get maasmodelref "$name" -n "$ns" -o jsonpath='{.status.phase}' 2>/dev/null)" = "Ready" ] \
     && ok "MaaSModelRef ${ref} Ready" || bad "MaaSModelRef ${ref} no Ready"
@@ -61,15 +61,26 @@ if [ -n "${MAAS_API_KEY:-}" ]; then
     "${H}/llm/gpt-oss-20b/v1/chat/completions")
   [ "$code" = "200" ] && ok "modelo local responde 200" || bad "modelo local devuelve ${code} (403 = API key caducada o sin permiso)"
 
-  code=$(curl -sk -o /tmp/chk-cloud.json -w '%{http_code}' --max-time 60 \
-    -H "Authorization: Bearer ${MAAS_API_KEY}" -H 'Content-Type: application/json' -X POST \
-    -d '{"model":"opus5-cloud","messages":[{"role":"user","content":"ping"}],"max_tokens":5}' \
-    "${H}/external-models/opus5-cloud/v1/chat/completions")
+  # La primera peticion tras un rato inactivo suele devolver 503: Envoy tiene que
+  # levantar la conexion TLS con el proveedor externo. Se reintenta una vez, y por
+  # eso conviene "calentar" el modelo antes de salir al escenario.
+  cloud_call() {
+    curl -sk -o /tmp/chk-cloud.json -w '%{http_code}' --max-time 90 \
+      -H "Authorization: Bearer ${MAAS_API_KEY}" -H 'Content-Type: application/json' -X POST \
+      -d '{"model":"gpt-5.5","messages":[{"role":"user","content":"ping"}],"max_completion_tokens":50}' \
+      "${H}/v1/chat/completions"
+  }
+  code=$(cloud_call)
+  if [ "$code" = "503" ]; then
+    skip "primera llamada al cloud 503 (conexion en frio), reintentando"
+    sleep 3; code=$(cloud_call)
+  fi
   case "$code" in
     200) ok "modelo cloud responde 200" ;;
-    401) bad "modelo cloud 401: la ABSK del ExternalProvider ha caducado -> regenerala (README paso 3)" ;;
+    401) bad "modelo cloud 401: la OpenAI API key del ExternalProvider ha caducado -> regenerala (README paso 3)" ;;
+    400) bad "modelo cloud 400: gpt-5.5 exige max_completion_tokens (max_tokens no vale)" ;;
     403) bad "modelo cloud 403: la API key no tiene acceso al cloud (key de Ventas?)" ;;
-    503) bad "modelo cloud 503: el ExternalProvider no puede hablar con el proveedor (ABSK invalida o endpoint caido)" ;;
+    503) bad "modelo cloud 503: el ExternalProvider no puede hablar con el proveedor (OpenAI API key invalida o endpoint caido)" ;;
     *)   bad "modelo cloud devuelve ${code}" ;;
   esac
 else
@@ -80,15 +91,22 @@ echo "== 4. Sandbox + OpenCode =="
 SANDBOX="${SANDBOX:-opencode-scm}"; GATEWAY="${GATEWAY:-scm-demo}"
 if command -v openshell >/dev/null 2>&1; then
   export OPENSHELL_GATEWAY_INSECURE="${OPENSHELL_GATEWAY_INSECURE:-true}"
-  OUT=$(openshell sandbox exec --gateway "$GATEWAY" --name "$SANDBOX" --no-tty -- \
-    bash -lc 'cd /sandbox && opencode run --model local/gpt-oss-20b "responde solo: ok" 2>&1 | tail -3' 2>&1 | tail -3)
-  if printf '%s' "$OUT" | grep -qi 'policy_denied'; then
-    bad "OpenCode bloqueado por la politica del sandbox: añade /sandbox/.npm-global/** a los binarios y recarga con 'openshell policy set'"
-  elif printf '%s' "$OUT" | grep -qiE 'forbidden|unauthorized|error'; then
-    bad "OpenCode falla en el sandbox: ${OUT}"
-  else
-    ok "OpenCode responde desde el sandbox con el modelo local"
-  fi
+  oc_run() {
+    openshell sandbox exec --gateway "$GATEWAY" --name "$SANDBOX" --no-tty -- \
+      bash -lc "cd /sandbox && opencode run --model $1 'responde solo: ok' 2>&1 | tail -3" 2>&1 | tail -3
+  }
+  for model in local/gpt-oss-20b cloud/gpt-4.1; do
+    OUT=$(oc_run "$model")
+    if printf '%s' "$OUT" | grep -qi 'policy_denied'; then
+      bad "OpenCode bloqueado por la politica del sandbox con ${model}: añade /sandbox/.npm-global/** a los binarios y recarga con 'openshell policy set'"
+    elif printf '%s' "$OUT" | grep -qi "reasoningSummary"; then
+      bad "OpenCode con ${model}: el modelo es de la familia gpt-5 y OpenCode inyecta reasoningSummary. Usa gpt-4.1 para el agente"
+    elif printf '%s' "$OUT" | grep -qiE 'forbidden|unauthorized|error'; then
+      bad "OpenCode falla con ${model}: ${OUT}"
+    else
+      ok "OpenCode responde desde el sandbox con ${model}"
+    fi
+  done
 else
   skip "openshell CLI no encontrado: comprobacion del sandbox omitida"
 fi

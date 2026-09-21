@@ -1,0 +1,20 @@
+# El nombre del ExternalModel (y modelName) tiene que ser EXACTAMENTE el id del
+# modelo en el proveedor, igual que targetModel.
+#
+# Si se usa un alias (p.ej. modelName: gpt55-cloud con targetModel: gpt-5.5) la
+# HTTPRoute generada casa por header X-Gateway-Model-Name=<targetModel> mientras
+# el ext-proc resuelve el alias, no casa ninguna regla y el gateway responde
+# 404 route_not_found. Ver README > Troubleshooting.
+apiVersion: inference.opendatahub.io/v1alpha1
+kind: ExternalModel
+metadata:
+  name: gpt-5.5
+  namespace: external-models
+spec:
+  modelName: gpt-5.5
+  externalProviderRefs:
+    - ref:
+        name: openai
+      targetModel: gpt-5.5
+      apiFormat: openai-chat
+      path: /v1/chat/completions

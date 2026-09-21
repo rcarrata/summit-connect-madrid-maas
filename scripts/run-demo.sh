@@ -17,7 +17,7 @@ N=${1:-8}
 LOCAL_RESOURCE="gpt-oss-20b"
 LOCAL_NS="llm"
 
-CLOUD_RESOURCE="opus5-cloud"
+CLOUD_RESOURCE="gpt-5.5"
 CLOUD_NS="external-models"
 
 oc whoami >/dev/null 2>&1 || { echo "not logged in to a cluster"; exit 1; }
@@ -104,7 +104,7 @@ login_and_key "desarrollador-1" || exit 1
 echo "  gpt-oss-20b (local GPU):"
 fire_burst "$KEY" "${H}/${LOCAL_NS}/${LOCAL_RESOURCE}/v1/chat/completions" "${LOCAL_RESOURCE}" "$N"
 
-echo "  opus5-cloud (cloud) - rate limit esperado ~10k tok/min:"
+echo "  gpt-5.5 (cloud) - rate limit esperado ~10k tok/min:"
 fire_burst "$KEY" "${H}/${CLOUD_NS}/${CLOUD_RESOURCE}/v1/chat/completions" "${CLOUD_RESOURCE}" "$N"
 
 # --- vendedor-1 ---
@@ -117,11 +117,11 @@ login_and_key "vendedor-1" || exit 1
 echo "  gpt-oss-20b (local GPU):"
 fire_burst "$KEY" "${H}/${LOCAL_NS}/${LOCAL_RESOURCE}/v1/chat/completions" "${LOCAL_RESOURCE}" "$N"
 
-echo "  opus5-cloud (cloud):"
-fire_denied "$KEY" "${H}/${CLOUD_NS}/${CLOUD_RESOURCE}/v1/chat/completions" "${CLOUD_RESOURCE}" "opus5-cloud"
+echo "  gpt-5.5 (cloud):"
+fire_denied "$KEY" "${H}/${CLOUD_NS}/${CLOUD_RESOURCE}/v1/chat/completions" "${CLOUD_RESOURCE}" "gpt-5.5"
 
 # --- summary ---
 printf '\n=== Resumen ===\n'
 echo "Comportamiento esperado:"
-echo "  desarrollador-1: ve 2 modelos, gpt-oss-20b OK, opus5-cloud rate-limited (~10k tok/min)"
-echo "  vendedor-1:      ve 1 modelo, gpt-oss-20b OK (20k tok/min), opus5-cloud 403"
+echo "  desarrollador-1: ve 2 modelos, gpt-oss-20b OK, gpt-5.5 rate-limited (~10k tok/min)"
+echo "  vendedor-1:      ve 1 modelo, gpt-oss-20b OK (20k tok/min), gpt-5.5 403"

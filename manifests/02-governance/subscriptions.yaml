@@ -5,7 +5,7 @@
 # suscripciones por defecto (free=10, premium=20).
 #
 # Matriz de limites:
-#   Desarrolladores: gpt-oss-20b 50000 tok/min, opus5-cloud 2000 tok/min
+#   Desarrolladores: gpt-oss-20b 50000 tok/min, gpt-5.5 2000 tok/min, gpt-4.1 20000 tok/min
 #   Ventas:          gpt-oss-20b 20000 tok/min (sin acceso a cloud)
 #
 # El limite del cloud es bajo a proposito: con 2000 tok/min, dos o tres
@@ -34,11 +34,17 @@ spec:
       tokenRateLimits:
         - limit: 50000
           window: 1m
-    - name: opus5-cloud
+    - name: gpt-5.5
       namespace: external-models
       tokenRateLimits:
         # bajo a proposito: el 429 tiene que salir en directo
         - limit: 2000
+          window: 1m
+    - name: gpt-4.1
+      namespace: external-models
+      tokenRateLimits:
+        # el agente de codigo necesita margen para trabajar
+        - limit: 20000
           window: 1m
   priority: 30
 ---
