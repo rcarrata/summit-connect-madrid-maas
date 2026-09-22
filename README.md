@@ -149,11 +149,31 @@ Recarga **sin cache** (Cmd+Shift+R o pestaña nueva): con un F5 normal el banner
 ### 7. Comprobacion previa (obligatoria)
 
 ```bash
-./scripts/check-demo.sh
+export OPENSHELL_GATEWAY_INSECURE=true          # el gateway usa un cert autofirmado
+MAAS_API_KEY='sk-oai-...' \
+  SANDBOX=opencode-scm GATEWAY=scm-demo \
+  ./scripts/check-demo.sh
 ```
 
 Valida de golpe: modelos Ready, presentador con suscripcion, inferencia local y cloud (con reintento por
-la conexion en frio) y OpenCode dentro del sandbox contra el modelo local **y** el cloud.
+la conexion en frio) y OpenCode dentro del sandbox contra el modelo local **y** el cloud. Sin
+`MAAS_API_KEY` se salta la parte de inferencia; sin el CLI de `openshell`, la del sandbox.
+
+Salida esperada:
+
+```
+== 1. Modelos y gobernanza ==
+  ✓ gpt-oss-20b Ready
+  ✓ MaaSModelRef external-models/gpt-5.5 Ready
+  ✓ MaaSModelRef external-models/gpt-4.1 Ready
+  ✓ admin incluido en la suscripcion de desarrolladores
+== 3. Inferencia real ==
+  ✓ modelo local responde 200
+  ✓ modelo cloud responde 200
+== 4. Sandbox + OpenCode ==
+  ✓ OpenCode responde desde el sandbox con local/gpt-oss-20b
+  ✓ OpenCode responde desde el sandbox con cloud/gpt-4.1
+```
 
 ---
 
@@ -161,7 +181,7 @@ la conexion en frio) y OpenCode dentro del sandbox contra el modelo local **y** 
 
 ### Acto 1 - El problema del CIO (3 min)
 
-> "Sois el CIO. Dos equipos, dos modelos: uno local en vuestras GPUs, otro en la nube. El local es seguro
+> "Sois el CIO. Dos equipos y dos mundos: modelos en vuestras GPUs y modelos en la nube. El local es seguro
 > pero limitado. El cloud es potente pero caro. Como dais acceso a cada equipo con garantias?"
 
 Nada que clicar todavia. Solo la diapositiva.
@@ -179,7 +199,7 @@ aparecen `gpt-5.5` y `gpt-4.1` con su provider `openai` en estado `Ready`.
 
 ![Modelos cloud registrados](docs/images/04-deployments-external-cloud.png)
 
-**UI**: `Gen AI studio` → `AI asset endpoints` → proyecto `sandbox-scm`. Los dos modelos, en la misma lista,
+**UI**: `Gen AI studio` → `AI asset endpoints` → proyecto del equipo. Los tres modelos, en la misma lista,
 con el mismo ciclo de vida y el mismo endpoint de gateway:
 
 ![AI asset endpoints con los tres modelos](docs/images/11-ai-asset-endpoints.png)
@@ -248,10 +268,14 @@ Si prefieres verlo en numeros, `./scripts/run-demo.sh` hace rafagas por equipo y
 Conecta al sandbox (una sola linea, y es la unica terminal de la demo):
 
 ```bash
+export OPENSHELL_GATEWAY_INSECURE=true
 openshell sandbox exec --gateway scm-demo --name opencode-scm --tty -- bash -l
 ```
 
-Dentro, todo con **OpenCode**. La key de MaaS ya esta inyectada en el entorno, y los dos modelos estan
+Si prefieres hacerlo desde un **workbench** de RHOAI en vez de tu portatil, ver
+[Conectar a OpenShell desde el workbench](#conectar-a-openshell-desde-el-workbench).
+
+Dentro, todo con **OpenCode**. La key de MaaS ya esta inyectada en el entorno, y los dos modelos del agente estan
 declarados como providers (`local/gpt-oss-20b` y `cloud/gpt-4.1`), asi que cambiar de modelo es
 `/models` en el TUI o `--model` en la CLI:
 
@@ -318,6 +342,75 @@ El agente entra en AS y, al intentar Marca, recibe un **403 del propio sandbox**
 
 ---
 
+## Conectar a OpenShell desde el workbench
+
+El comando que aparece en el workshop de Fed Aura Capital no vale aqui tal cual:
+
+```bash
+openshell gateway add http://openshell:8080 --name openshift --local   # NO funciona
+```
+
+Dos motivos, y el CLI los va soltando de uno en uno:
+
+1. **DNS**: el gateway vive en `sandbox-scm`. Desde un workbench de otro proyecto el nombre corto no
+   resuelve (`failed to lookup address information`). En el workshop funciona porque gateway y workbench
+   comparten namespace.
+2. **TLS**: este gateway se instalo con `disable_tls = false`, asi que `http://` se corta
+   (`connection reset`) y `https://` pide material mTLS de cliente
+   (`mTLS certificates for gateway ... were not found`).
+
+Ojo con un detalle que confunde: `gateway add` avisa `⚠ Gateway is not reachable` y **aun asi lo registra
+y lo deja como activo**, con lo que cada intento fallido te rompe el gateway que si funcionaba.
+
+### Receta que funciona
+
+Si el workbench esta en **otro** namespace, primero el alias de DNS (Service `ExternalName`):
+
+```bash
+oc apply -f manifests/04-sandbox/openshell-alias.yaml    # ajusta el namespace dentro del fichero
+```
+
+Y en los dos casos, copia el material mTLS del gateway al workbench. Se reutiliza el que ya tienes en el
+portatil tras `install-openshell.sh`:
+
+```bash
+NS=sandbox-scm; WB=summit-connect-entorno-desarro-0; CT=summit-connect-entorno-desarro
+
+mkdir -p /tmp/oshell/gateways/openshift
+cp -r ~/.config/openshell/gateways/scm-demo/mtls /tmp/oshell/gateways/openshift/
+cat > /tmp/oshell/gateways/openshift/metadata.json <<'EOF'
+{
+  "name": "openshift",
+  "gateway_endpoint": "https://openshell:8080",
+  "is_remote": false,
+  "gateway_port": 0,
+  "auth_mode": "mtls"
+}
+EOF
+printf 'openshift' > /tmp/oshell/active_gateway
+
+oc cp /tmp/oshell "${NS}/${WB}:/opt/app-root/src/.config/openshell" -c "$CT"
+oc exec -n "$NS" "$WB" -c "$CT" -- bash -lc \
+  'chmod 600 ~/.config/openshell/gateways/openshift/mtls/tls.key; \
+   echo "export OPENSHELL_GATEWAY_INSECURE=true" >> ~/.bashrc'
+```
+
+Desde la terminal del workbench (en una ya abierta hay que exportar la variable a mano):
+
+```bash
+export OPENSHELL_GATEWAY_INSECURE=true
+openshell sandbox list
+openshell sandbox exec --name opencode-scm --tty -- bash -l
+```
+
+El certificado del gateway ya incluye los SAN `openshell`, `openshell.<ns>.svc.cluster.local`,
+`openshell.<ns>.svc` y el host del route, asi que el nombre corto es el correcto; el
+`OPENSHELL_GATEWAY_INSECURE` hace falta solo porque es **autofirmado**.
+
+Para quitar ese flag hay dos caminos: emitir el certificado del gateway con la **service CA de OpenShift**
+(los pods confian en ella por defecto), o desplegar un gateway **sin TLS** en el namespace del equipo, que
+es lo que hace el workshop y lo que deja funcionar el `http://openshell:8080` de la documentacion.
+
 ## Playground por equipo
 
 Cada equipo tiene su **proyecto** y es admin de el (`manifests/03-projects/team-projects.yaml`):
@@ -347,7 +440,7 @@ Como plantilla declarativa de `OGXServer` hay `manifests/03-projects/playground-
 
 ```
 manifests/
-  01-models/                          Los dos modelos, uno por directorio
+  01-models/                          Modelos: local y cloud, un directorio cada uno
     gpt-oss-20b/                        Local, en GPU (kustomize, de rhoai-maas-guide)
       llm/                                LLMInferenceService (vLLM CUDA)
       maas/                               MaaSModelRef, auth policy y suscripciones base
@@ -367,6 +460,7 @@ manifests/
   04-sandbox/                         El agente y su jaula
     openshell-values.yaml               Helm values del gateway de OpenShell
     openshell-route.yaml                Route passthrough TLS (referencia)
+    openshell-alias.yaml                Service ExternalName para usar el nombre corto openshell
     opencode-config.json                OpenCode: providers local/ y cloud/
     policy-scm.yaml.template            Politica del sandbox (as.com si, marca.com no)
 
@@ -390,7 +484,7 @@ equipo y por ultimo el sandbox del agente.
 
 ## Troubleshooting
 
-Los cuatro fallos reales que hemos visto en este cluster, con su sintoma exacto:
+Todos estos fallos son reales, vistos en este cluster durante los ensayos, con su sintoma exacto:
 
 | Sintoma | Causa | Arreglo |
 |---|---|---|
@@ -403,7 +497,8 @@ Los cuatro fallos reales que hemos visto en este cluster, con su sintoma exacto:
 | Dentro del sandbox, OpenCode no ve ningun modelo; `curl` al gateway devuelve `403` y la lista sale vacia | **API key de MaaS caducada** (las de `expiresIn: 24h` mueren al dia siguiente) | Crea otra en la UI con 30 dias y re-ejecuta `setup-sandbox.sh` |
 | OpenCode falla con `Error: Forbidden: policy_denied` pero `curl` al mismo endpoint funciona | La politica del sandbox autoriza binarios por ruta y OpenCode vive en `/sandbox/.npm-global/...` | Ya corregido en `04-sandbox/policy-scm.yaml.template`. Recarga en caliente: `openshell policy set --policy <file> --wait <sandbox>` |
 | El proyecto muestra el banner *"Kueue is disabled in this cluster"* | `OdhDashboardConfig` tiene `disableKueue: true` y el namespace lleva `kueue.openshift.io/managed` | `oc patch odhdashboardconfig odh-dashboard-config -n redhat-ods-applications --type merge -p '{"spec":{"dashboardConfig":{"disableKueue":false}}}'` y **recarga sin cache** (con F5 normal el banner sigue) |
-| Desde el workbench, `openshell gateway add http://openshell:8080` dice *Gateway is not reachable* y luego *dns error* | El gateway vive en el namespace `sandbox-scm`, no en el del workbench, y sirve **TLS con mTLS** | Usa el FQDN `https://openshell.sandbox-scm.svc.cluster.local:8080` y copia el material mTLS del cliente, o conecta desde el portatil del presentador |
+| Desde el workbench, `openshell gateway add http://openshell:8080` dice *Gateway is not reachable*, luego *dns error* o *connection reset* | El gateway esta en `sandbox-scm` (DNS) y sirve TLS con mTLS (protocolo). Ademas `gateway add` registra y activa el gateway aunque no sea alcanzable, rompiendo el que si funcionaba | Ver [Conectar a OpenShell desde el workbench](#conectar-a-openshell-desde-el-workbench): alias `ExternalName`, material mTLS copiado y `https://openshell:8080` |
+| `openshell sandbox list` responde `invalid peer certificate: UnknownIssuer` | El certificado del gateway es autofirmado | `export OPENSHELL_GATEWAY_INSECURE=true` (o `--gateway-insecure` por comando). En una terminal ya abierta hay que exportarlo a mano aunque este en el `.bashrc` |
 
 ## Limpiar
 

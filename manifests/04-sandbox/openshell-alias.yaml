@@ -1,0 +1,20 @@
+# Alias del gateway de OpenShell dentro del proyecto del equipo.
+#
+# El gateway vive en el namespace sandbox-scm, asi que desde el workbench el
+# nombre corto "openshell" no resuelve. Un Service ExternalName arregla el DNS
+# y, como el certificado del gateway ya lleva los SAN "openshell" y
+# "openshell.sandbox-scm.svc.cluster.local", la verificacion TLS tambien cuadra.
+apiVersion: v1
+kind: Service
+metadata:
+  name: openshell
+  namespace: desarrolladores-1-proyecto   # cambiar al namespace del workbench
+  labels:
+    app.kubernetes.io/component: gateway-alias
+spec:
+  type: ExternalName
+  externalName: openshell.sandbox-scm.svc.cluster.local
+  ports:
+    - name: grpc
+      port: 8080
+      protocol: TCP
